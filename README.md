@@ -16,7 +16,7 @@ It runs entirely in your browser. There is no server, sign-up or database.
 
 **Online:** once GitHub Pages is turned on for this repo, open `https://ner04.github.io/resume-editor-/`.
 
-**On your computer:** download or clone the repo and open `index.html` in your browser. To use Claude Code or Codex, start the local helper described below instead. It serves the app for you.
+**On your computer:** download or clone the repo and open `index.html` in your browser. To use an AI agent on your computer (Claude Code, Codex, Kiro, Grok, Gemini CLI, GitHub Copilot), start the local helper described below instead. It serves the app for you.
 
 ```bash
 git clone https://github.com/Ner04/resume-editor-.git
@@ -69,23 +69,36 @@ The scoring, keyword checks and quick fixes work without AI. For line-by-line re
 
 | Option | What you need | Cost |
 | --- | --- | --- |
-| **Claude Code on my computer** | [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) installed and signed in | Uses your own Claude plan |
-| **Codex on my computer** | [Codex CLI](https://github.com/openai/codex) installed and signed in | Uses your own ChatGPT/OpenAI plan |
+| **An AI agent on my computer** | Any of the agents below, installed and signed in, plus the local helper | Uses your own plan with that tool |
 | **Any chatbot (copy and paste)** | Nothing: ChatGPT, Gemini, Claude or Copilot in any tab | Free |
+
+Agents the local helper supports:
+
+| Agent | Command it runs | How it stays safe |
+| --- | --- | --- |
+| [Claude Code](https://docs.claude.com/en/docs/claude-code/overview) | `claude -p` | Tools turned off |
+| [Codex CLI](https://github.com/openai/codex) | `codex exec` | Read-only sandbox |
+| [Kiro CLI](https://kiro.dev/docs/cli/headless/) | `kiro-cli chat --no-interactive` | No tools approved |
+| [Grok Build CLI](https://docs.x.ai/build/cli/headless-scripting) | `grok -p` | Tool use not auto-approved |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gemini -p` | Tools need approval, which isn't given |
+| [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli/automate-copilot-cli/run-cli-programmatically) | `copilot -p -s` | Tools need permission, which isn't given |
+| Anything else | set up in `bridge/agents.json` | Your choice |
+
+The AI menu shows only the agents the helper actually found on your computer. Kiro's headless mode needs a Kiro plan that supports it (see Kiro's docs).
 
 When the page runs as a Claude artifact inside claude.ai, a fourth option, **Claude (in this page)**, appears automatically.
 
-### Use Claude Code or Codex (the local helper)
+### Use an AI agent on your computer (the local helper)
 
 A web page can't start programs on your computer by itself. `bridge/resumefit-bridge.mjs` is a small helper that connects the page to your installed CLI. It needs Node.js 18 or newer and has no other dependencies.
 
-1. Install Claude Code or Codex, and run it once in a terminal so you're signed in.
+1. Install one of the agents above, and run it once in a terminal so you're signed in.
 2. In this project's folder, run:
    ```bash
    node bridge/resumefit-bridge.mjs
    ```
 3. It prints a **connection code** and a link like `http://127.0.0.1:8787/#bridge=…`. Open that link and the app opens already connected.
-   Using the GitHub Pages version instead? Choose **Claude Code on my computer** or **Codex on my computer**, paste the code, and press **Connect**.
+   Using the GitHub Pages version instead? Choose your agent (for example **Kiro on my computer**) in the AI menu, paste the code, and press **Connect**.
 4. Press **Suggest rewrites**. Keep the terminal window open while you use it.
 
 <img src="docs/screenshots/ai-local.png" alt="AI menu set to Claude Code on my computer, connected, with Claude Code and Codex found" width="560">
@@ -93,7 +106,7 @@ A web page can't start programs on your computer by itself. `bridge/resumefit-br
 **Safety:**
 - The helper only listens on `127.0.0.1`, so other devices on your network can't reach it.
 - Every request needs the connection code, so other websites you visit can't use it.
-- Claude Code runs with its tools turned off, and Codex runs in its read-only sandbox. Both run in an empty temporary folder.
+- Every agent runs in an empty temporary folder, with its tools off or read-only (see the table above). The prompt also tells it not to use tools.
 - Your resume goes only to the AI tool you picked. The helper stores nothing.
 
 **Settings** (optional environment variables):
@@ -104,14 +117,20 @@ A web page can't start programs on your computer by itself. `bridge/resumefit-br
 | `RESUMEFIT_TOKEN` | random | A fixed connection code, so you don't have to paste a new one each time |
 | `RESUMEFIT_ORIGINS` | any | Only allow these sites, e.g. `https://ner04.github.io` |
 | `RESUMEFIT_TIMEOUT` | `240` | Seconds to wait for an answer |
-| `RESUMEFIT_CLAUDE_BIN` / `RESUMEFIT_CODEX_BIN` | `claude` / `codex` | Path to the CLI if it isn't on your PATH. The helper also checks common install folders (Homebrew, npm, nvm, `~/.local/bin`) and your shell's PATH |
-| `RESUMEFIT_CLAUDE_ARGS` / `RESUMEFIT_CODEX_ARGS` | see the script | JSON array to replace the CLI arguments, if a future CLI version changes its flags |
+| `RESUMEFIT_<AGENT>_BIN` | the command name | Path to an agent's CLI if it isn't on your PATH, e.g. `RESUMEFIT_KIRO_BIN`, `RESUMEFIT_GROK_BIN`. The helper also checks common install folders (Homebrew, npm, nvm, `~/.local/bin`) and your shell's PATH |
+| `RESUMEFIT_<AGENT>_ARGS` | see the script | JSON array to replace an agent's arguments, if a future CLI version changes its flags |
+| `RESUMEFIT_AGENTS` | `bridge/agents.json` | Where to read extra agents from |
 
-**Codex or Claude Code shows "not found" but is installed?** Find its path with `which codex` (or `which claude`) in a normal terminal, then start the helper with it:
+**An agent shows "not found" but is installed?** Find its path with `which` in a normal terminal, then start the helper with it:
 ```bash
 RESUMEFIT_CODEX_BIN="$(which codex)" node bridge/resumefit-bridge.mjs
+RESUMEFIT_KIRO_BIN="$(which kiro-cli)" node bridge/resumefit-bridge.mjs
 ```
 The Codex desktop app and the Codex command-line tool are separate. The helper needs the command-line tool (`npm i -g @openai/codex` or `brew install codex`).
+
+**Add another AI tool:** copy `bridge/agents.example.json` to `bridge/agents.json`, and list the tool's command and arguments. In the arguments, `{PROMPT}` is replaced by the prompt; if it isn't there, the prompt is sent on standard input. Restart the helper and the tool appears in the AI menu. The example file includes Cursor Agent, OpenCode and Qwen Code. Only add tools you trust, and check that they don't edit files or run commands without asking.
+
+**Windows:** Claude Code, Codex, Kiro and Gemini CLI read the prompt from standard input and work normally. Grok and GitHub Copilot take it as an argument, which only works when they're installed as an `.exe`. Otherwise run the helper in WSL.
 
 **Browser note:** Chrome and Edge let the GitHub Pages version talk to the helper. Safari and some Firefox setups block https pages from calling `http://127.0.0.1`. If **Connect** fails there, open the link the helper prints instead.
 
@@ -157,7 +176,8 @@ The overall score is a guide, not a guarantee. Every company's ATS filters diffe
 index.html                  page layout and styles
 src/app.js                  scoring, keywords, suggestions, AI options, UI
 src/pdf-engine.js           reads the PDF and rewrites lines in place
-bridge/resumefit-bridge.mjs local helper for Claude Code and Codex
+bridge/resumefit-bridge.mjs local helper for AI agents on your computer
+bridge/agents.example.json  template for adding more agents
 docs/screenshots/           images used in this README
 ```
 
