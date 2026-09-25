@@ -178,6 +178,71 @@ textarea{width:100%;border:1px solid var(--line);border-radius:10px;background:v
 .pdf-loading{padding:40px 16px;text-align:center;color:var(--ink-3);font-size:13px;background:var(--panel);border-radius:8px}
 .fitchip{font-size:11px;font-weight:600;letter-spacing:0;text-transform:none;padding:1px 7px;border-radius:999px}
 .fitchip.ok{background:var(--good-soft);color:var(--good)} .fitchip.shrink{background:var(--accent-soft);color:var(--accent)} .fitchip.bad{background:var(--bad-soft);color:var(--bad)}
+
+/* folding */
+.fold{margin-left:auto;width:30px;height:30px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--ink-2);display:inline-grid;place-items:center;flex:none}
+.fold::before{content:"";width:8px;height:8px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:translateY(-2px) rotate(45deg);transition:transform .2s}
+.fold:hover{background:var(--ground);border-color:var(--line)}
+.folded .fold::before{transform:translateY(2px) rotate(-135deg)}
+.box.folded > .box-b{display:none}
+.box.folded > .box-h{border-bottom:0}
+.fold-sum{flex:1 1 auto;text-align:right}
+.box-h .tabs + .fold{margin-left:0}
+.box.folded .tabs{display:none}
+.scorebar{position:relative}
+.scorebar > .fold{position:absolute;top:10px;right:10px}
+.scorebar.folded{grid-template-columns:auto minmax(0,1fr);padding-block:10px}
+.scorebar.folded .subs,.scorebar.folded .rv{display:none}
+.scorebar.folded .verdict{margin:0}
+.scorebar.folded .ring,.scorebar.folded .ring svg{width:64px;height:64px}
+.scorebar.folded .ring .n b{font-size:18px}
+.scorebar.folded .ring .n small{display:none}
+@media (min-width:901px){
+  .resume-box{position:sticky;top:calc(12px + env(safe-area-inset-top,0px));max-height:calc(100vh - 24px);display:flex;flex-direction:column}
+  .resume-box .paper-wrap{overflow:auto;flex:1 1 auto;min-height:0}
+}
+.empty-resume{display:grid;gap:10px;justify-items:center;text-align:center;padding:48px 20px;background:var(--panel);border:1px dashed var(--line);border-radius:12px;color:var(--ink-2);max-width:760px;margin:0 auto}
+.empty-resume b{font:600 17px/1.2 var(--f-disp);color:var(--ink)}
+/* start popup */
+.modal-bg{position:fixed;inset:0;background:rgba(10,14,20,.55);display:grid;place-items:center;padding:16px;z-index:20}
+.modal{position:relative;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.35);width:min(520px,100%);padding:26px 24px 20px;display:grid;gap:14px}
+.modal h2{margin:0;font:700 21px/1.2 var(--f-disp);text-wrap:balance}
+.modal p{margin:0;color:var(--ink-2);font-size:13.5px}
+.x{position:absolute;top:10px;right:10px;width:32px;height:32px;border-radius:8px;border:0;background:transparent;color:var(--ink-2);font-size:22px;line-height:1}
+.x:hover{background:var(--ground)}
+.drop{display:grid;gap:4px;place-items:center;text-align:center;padding:30px 16px;border:2px dashed var(--line);border-radius:14px;background:var(--ground);cursor:pointer;transition:border-color .15s,background .15s}
+.drop:hover,.drop.over{border-color:var(--accent);background:var(--accent-soft)}
+.drop input{display:none}
+.drop b{font-size:15px;color:var(--accent)}
+.drop span{font-size:12.5px;color:var(--ink-3)}
+.modal-f{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+/* chat */
+.chat-fab{position:fixed;right:20px;bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:15;border:0;border-radius:999px;background:var(--accent);color:var(--on-accent);font:600 14px var(--f-ui);padding:12px 18px;box-shadow:0 8px 24px rgba(36,72,200,.35);cursor:pointer}
+.chat-fab[aria-expanded="true"]{display:none}
+.chat{position:fixed;right:20px;bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:16;width:min(400px,calc(100vw - 32px));height:min(620px,calc(100vh - 40px));background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.3);display:flex;flex-direction:column;overflow:hidden}
+.chat[hidden]{display:none}
+.chat-h{display:flex;align-items:flex-start;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line-2)}
+.chat-h b{font:600 15px var(--f-disp);display:block}
+.chat-via{font-size:12px;color:var(--ink-3)}
+.chat-h .x{position:static}
+.chat-log{flex:1 1 auto;overflow:auto;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.msg{max-width:88%;padding:9px 12px;border-radius:12px;font-size:13.5px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}
+.msg.me{align-self:flex-end;background:var(--accent);color:var(--on-accent);border-bottom-right-radius:4px}
+.msg.bot{align-self:flex-start;background:var(--ground);border:1px solid var(--line-2);border-bottom-left-radius:4px}
+.msg .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;white-space:normal}
+.msg .acts .btn{padding:5px 10px;font-size:12.5px}
+.msg.thinking{color:var(--ink-3)}
+.chat-chips{display:flex;gap:6px;flex-wrap:wrap;padding:0 16px 10px}
+.chat-chips button{font:500 12px var(--f-ui);border:1px solid var(--line);background:var(--panel);color:var(--ink-2);border-radius:999px;padding:5px 10px;cursor:pointer}
+.chat-chips button:hover{border-color:var(--accent);color:var(--accent)}
+.chat-f{display:flex;gap:8px;align-items:flex-end;padding:10px 12px 12px;border-top:1px solid var(--line-2)}
+.chat-f textarea{flex:1;min-height:42px;max-height:140px;resize:none;background:var(--ground)}
+/* when the assistant is open on a wide screen, the page moves over so nothing is covered */
+@media (min-width:1200px){
+  body.chat-open .app{margin-right:420px;max-width:none}
+  .chat{top:calc(16px + env(safe-area-inset-top,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));height:auto;right:16px}
+}
+@media (max-width:560px){.chat{right:8px;left:8px;width:auto;bottom:8px;height:calc(100vh - 16px)}.chat-fab{right:12px;bottom:12px}}
 @media (max-width:1080px){.scorebar{grid-template-columns:auto minmax(0,1fr)}.scorebar .rv{grid-column:1/-1}}
 @media (max-width:900px){.split{grid-template-columns:minmax(0,1fr)}}
 @media (max-width:560px){
@@ -193,15 +258,17 @@ textarea{width:100%;border:1px solid var(--line);border-radius:10px;background:v
   <header class="top">
     <div class="brand"><h1>ResumeFit</h1><span>Tailor your resume to one job description</span></div>
     <div class="actions">
-      <label class="btn" for="upload" title="Upload a PDF or .txt resume">Upload resume (PDF)<input id="upload" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain"></label>
+      <label class="btn" for="upload" title="Upload a PDF or .txt resume">Upload resume<input id="upload" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain"></label>
       <button class="btn" id="undoBtn" disabled>Undo</button>
+      <button class="btn ghost" id="clearBtn" title="Clear the job description and resume">Start over</button>
       <button class="btn" id="copyBtn">Copy text</button>
       <button class="btn" id="cleanBtn" hidden>Download clean layout</button>
       <button class="btn primary" id="pdfBtn" hidden>Download PDF</button>
     </div>
   </header>
 
-  <section class="scorebar" aria-label="Match score">
+  <section class="scorebar" id="scoreBox" aria-label="Match score">
+    <button class="fold" data-fold="scoreBox" aria-expanded="true" aria-label="Hide score details" title="Hide score details"></button>
     <div class="ring" aria-live="polite">
       <svg viewBox="0 0 112 112" aria-hidden="true">
         <circle cx="56" cy="56" r="48" fill="none" stroke="var(--line-2)" stroke-width="10"></circle>
@@ -220,23 +287,25 @@ textarea{width:100%;border:1px solid var(--line);border-radius:10px;background:v
 
   <div class="split">
     <div class="col">
-      <section class="box" aria-labelledby="jdH">
-        <div class="box-h"><h2 id="jdH">Job description</h2><span class="hint">Paste the full JD. Scores update as you type.</span></div>
+      <section class="box" id="jdBox" aria-labelledby="jdH">
+        <div class="box-h"><h2 id="jdH">Job description</h2><span class="hint fold-sum" id="jdSum">Paste the full JD. Scores update as you type.</span>
+          <button class="fold" data-fold="jdBox" aria-expanded="true" aria-label="Collapse job description" title="Collapse"></button></div>
         <div class="box-b">
-          <textarea id="jd" spellcheck="false" aria-label="Job description"></textarea>
+          <textarea id="jd" spellcheck="false" aria-label="Job description" placeholder="Paste the job description here: the role, responsibilities and requirements."></textarea>
           <div class="meta" id="jdMeta"></div>
           <div class="kw-group"><h4>Required keywords <em id="reqCount"></em></h4><div class="chips" id="reqChips"></div></div>
           <div class="kw-group" id="prefGroup"><h4>Nice to have <em id="prefCount"></em></h4><div class="chips" id="prefChips"></div></div>
         </div>
       </section>
 
-      <section class="box" aria-labelledby="sgH">
+      <section class="box" id="sgBox" aria-labelledby="sgH">
         <div class="box-h">
           <h2 id="sgH">Suggested changes</h2>
           <div class="tabs" role="group" aria-label="Filter suggestions">
             <button data-f="open" aria-pressed="true">To review <span id="openCount"></span></button>
             <button data-f="all" aria-pressed="false">All</button>
           </div>
+          <button class="fold" data-fold="sgBox" aria-expanded="true" aria-label="Collapse suggested changes" title="Collapse"></button>
         </div>
         <div class="box-b">
           <div class="ai-status">
@@ -270,7 +339,7 @@ textarea{width:100%;border:1px solid var(--line);border-radius:10px;background:v
       </section>
     </div>
 
-    <section class="box" aria-labelledby="rsH">
+    <section class="box resume-box" id="rsBox" aria-labelledby="rsH">
       <div class="box-h">
         <h2 id="rsH">Your resume</h2>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -283,7 +352,7 @@ textarea{width:100%;border:1px solid var(--line);border-radius:10px;background:v
         </div>
       </div>
       <div class="box-b" style="padding-bottom:0">
-        <div class="banner" id="sampleBanner"><span>Sample resume and JD loaded as an example. Upload your PDF and paste your JD to start.</span><button class="btn" id="clearBtn">Clear both</button></div>
+        <div class="banner" id="sampleBanner" hidden><span>This is an example resume and job description. Upload your own resume to start.</span><label class="btn" for="upload">Upload resume</label></div>
         <div class="banner" id="pdfBanner" hidden><span id="pdfBannerText"></span></div>
         <div class="banner warn" id="pdfWarn" hidden></div>
         <div class="editor" id="lineEditor" hidden>
@@ -295,6 +364,11 @@ textarea{width:100%;border:1px solid var(--line);border-radius:10px;background:v
         </div>
       </div>
       <div class="paper-wrap">
+        <div class="empty-resume" id="emptyResume" hidden>
+          <b>No resume yet</b>
+          <span>Upload your resume PDF. It opens here in its original layout, ready to edit.</span>
+          <div class="ai-row" style="justify-content:center"><label class="btn primary" for="upload">Upload resume</label><button class="btn ghost" id="pasteInstead">Paste text instead</button></div>
+        </div>
         <div class="rview pdfpages" id="pdfView" hidden aria-label="Resume in its original layout"></div>
         <article class="rview paper" id="paper" aria-label="Resume preview"></article>
         <textarea id="resumeText" spellcheck="true" aria-label="Resume text" hidden></textarea>
@@ -302,6 +376,37 @@ textarea{width:100%;border:1px solid var(--line);border-radius:10px;background:v
     </section>
   </div>
 </div>
+<div class="modal-bg" id="startModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="smH" aria-describedby="smP">
+    <button class="x" id="smClose" aria-label="Close">×</button>
+    <h2 id="smH">Start with your resume</h2>
+    <p id="smP">Upload your resume as a PDF. It opens in its original layout, and every change you approve is written into that same file. Nothing leaves your browser unless you ask an AI for help.</p>
+    <label class="drop" id="smDrop" for="smFile">
+      <input id="smFile" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain">
+      <b>Choose your resume PDF</b>
+      <span>or drop it here</span>
+    </label>
+    <div class="modal-f">
+      <button class="btn ghost" id="smPaste">Paste text instead</button>
+      <button class="btn ghost" id="smExample">Try an example</button>
+      <button class="btn" id="smCancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<button class="chat-fab" id="chatFab" aria-expanded="false" aria-controls="chat"><span aria-hidden="true">✦</span> Resume assistant</button>
+<aside class="chat" id="chat" hidden aria-label="Resume assistant">
+  <div class="chat-h">
+    <div><b>Resume assistant</b><span class="chat-via" id="chatVia"></span></div>
+    <button class="x" id="chatClose" aria-label="Close assistant">×</button>
+  </div>
+  <div class="chat-log" id="chatLog" aria-live="polite"></div>
+  <div class="chat-chips" id="chatChips"></div>
+  <form class="chat-f" id="chatForm">
+    <textarea id="chatInput" rows="2" aria-label="Message" placeholder="Tell me what to change, e.g. “make it 100% ATS”"></textarea>
+    <button class="btn primary" id="chatSend" type="submit">Send</button>
+  </form>
+</aside>
 <div class="toast" id="toast" hidden></div>
 <script src="src/pdf-engine.js"></script>
 <script src="src/app.js"></script>
