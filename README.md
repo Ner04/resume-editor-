@@ -9,6 +9,8 @@
 
 It runs entirely in your browser. There is no server, sign-up or database.
 
+![ResumeFit: ATS score and keyword matches on the left, the resume in its original layout on the right](docs/screenshots/overview.png)
+
 ## Use it
 
 **Online:** once GitHub Pages is turned on for this repo, open `https://ner04.github.io/resume-editor-/`.
@@ -31,6 +33,10 @@ node bridge/resumefit-bridge.mjs
 5. Click **Download PDF** to get your original PDF with only the changed lines replaced. **Download clean layout** gives you a plain single-column version instead.
 
 Only add skills you have actually used. Recruiters ask about everything on your resume.
+
+| Review suggested changes | Edit any line in place |
+| --- | --- |
+| ![Suggested changes from Claude Code, each showing the old line, the new line and whether it fits the layout](docs/screenshots/suggestions.png) | ![Line editor open on the Languages line, showing that the edit fits at the original size](docs/screenshots/edit-line.png) |
 
 ## AI suggestions: three ways
 
@@ -56,6 +62,8 @@ A web page can't start programs on your computer by itself. `bridge/resumefit-br
 3. It prints a **connection code** and a link like `http://127.0.0.1:8787/#bridge=…`. Open that link and the app opens already connected.
    Using the GitHub Pages version instead? Choose **Claude Code on my computer** or **Codex on my computer**, paste the code, and press **Connect**.
 4. Press **Suggest rewrites**. Keep the terminal window open while you use it.
+
+<img src="docs/screenshots/ai-local.png" alt="AI menu set to Claude Code on my computer, connected, with Claude Code and Codex found" width="560">
 
 **Safety:**
 - The helper only listens on `127.0.0.1`, so other devices on your network can't reach it.
@@ -84,6 +92,8 @@ A web page can't start programs on your computer by itself. `bridge/resumefit-br
 
 Extra text or code fences around the reply are fine. The app finds the suggestions inside.
 
+<img src="docs/screenshots/ai-paste.png" alt="Copy-and-paste mode with a chatbot reply pasted in" width="560">
+
 ## How the original-layout editing works
 
 A PDF doesn't store paragraphs. It stores letters placed at exact positions. ResumeFit:
@@ -97,6 +107,8 @@ A PDF doesn't store paragraphs. It stores letters placed at exact positions. Res
 - New lines or sections can't be added without changing the layout. Use **Download clean layout** for that.
 - Scanned (image-only) and password-protected PDFs can't be edited in place. You can still paste the text.
 - A letter your resume never uses (a capital `K`, say) is drawn in the closest standard font.
+
+The screenshots use a made-up sample resume.
 
 ## Scoring
 
@@ -116,6 +128,7 @@ index.html                  page layout and styles
 src/app.js                  scoring, keywords, suggestions, AI options, UI
 src/pdf-engine.js           reads the PDF and rewrites lines in place
 bridge/resumefit-bridge.mjs local helper for Claude Code and Codex
+docs/screenshots/           images used in this README
 ```
 
 Libraries are loaded from cdnjs: pdf.js 3.11.174, pdf-lib 1.17.1 and jsPDF 2.5.1.
