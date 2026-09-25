@@ -1,0 +1,23 @@
+{
+  "_readme": "Copy this file to bridge/agents.json to add AI command-line tools to ResumeFit. In args, {PROMPT} is replaced by the prompt (otherwise it is sent on stdin) and {OUT} by a temporary file the tool can write its answer to. Restart the helper after editing. Only add tools you trust: they run on your computer.",
+  "agents": [
+    {
+      "id": "cursor",
+      "label": "Cursor Agent",
+      "bin": "cursor-agent",
+      "args": ["-p", "{PROMPT}", "--output-format", "text"]
+    },
+    {
+      "id": "opencode",
+      "label": "OpenCode",
+      "bin": "opencode",
+      "args": ["run", "{PROMPT}"]
+    },
+    {
+      "id": "qwen",
+      "label": "Qwen Code",
+      "bin": "qwen",
+      "args": ["-p", "Follow the instructions in the text above. Reply with the JSON only."]
+    }
+  ]
+}

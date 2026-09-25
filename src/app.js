@@ -834,20 +834,20 @@ document.querySelectorAll("[data-fold]").forEach(b => b.addEventListener("click"
 /* ---------- AI rewrites ---------- */
 /* Three ways to get AI suggestions:
    1. Claude inside claude.ai (when this page runs as a Claude artifact)
-   2. Claude Code or Codex on the user's own computer, through bridge/resumefit-bridge.mjs
+   2. an AI agent CLI on the user's own computer (Claude Code, Codex, Kiro, Grok, Gemini, Copilot…), through bridge/resumefit-bridge.mjs
    3. Any chatbot, by copying the prompt and pasting the reply back */
 const IN_CLAUDE = !!window.claude;
 let sampleFn = null, ctl = null;
 const AI = { provider: "", bridgeUrl: "", token: "", found: null };
 try { Object.assign(AI, JSON.parse(localStorage.getItem("resumefit.ai") || "{}")); } catch (e) {}
-AI.found = null;
+AI.found = null; AI.agents = null;
 const defaultBridge = () => /^(127\.0\.0\.1|localhost)$/.test(location.hostname) && /^https?:$/.test(location.protocol) ? location.origin : "http://127.0.0.1:8787";
 if (!AI.bridgeUrl) AI.bridgeUrl = defaultBridge();
 // a connection code handed over in the link: .../#bridge=CODE
 function readHashToken(){
   const tok = (location.hash.match(/bridge=([\w-]{8,})/) || [])[1];
   if (!tok) return false;
-  AI.token = tok; AI.provider = AI.provider && AI.provider.startsWith("local-") ? AI.provider : "local-claude"; AI.bridgeUrl = defaultBridge(); AI.found = null;
+  AI.token = tok; AI.provider = AI.provider && isLocal(AI.provider) ? AI.provider : "local-claude"; AI.bridgeUrl = defaultBridge(); AI.found = null; AI.agents = null;
   try { history.replaceState(null, "", location.pathname + location.search); } catch (e) {}
   return true;
 }
@@ -856,18 +856,31 @@ readHashToken();
 window.addEventListener("hashchange", () => { if (readHashToken()){ saveAI(); renderProviders(); connectBridge(false); } });
 function saveAI(){ try { localStorage.setItem("resumefit.ai", JSON.stringify({ provider: AI.provider, bridgeUrl: AI.bridgeUrl, token: AI.token })); } catch (e) {} }
 
-const PROVIDERS = [
-  { id: "claude", label: "Claude (in this page)", show: () => !!sampleFn },
-  { id: "local-claude", label: "Claude Code on my computer", show: () => !IN_CLAUDE },
-  { id: "local-codex", label: "Codex on my computer", show: () => !IN_CLAUDE },
-  { id: "paste", label: "Any chatbot (copy and paste)", show: () => true }
-];
+// AI agents the local helper can run. The helper reports which ones are installed.
+const AGENT_LABELS = { claude: "Claude Code", codex: "Codex", kiro: "Kiro", grok: "Grok", gemini: "Gemini CLI", copilot: "GitHub Copilot" };
+const isLocal = p => typeof p === "string" && p.startsWith("local-");
+const agentOf = p => p.slice(6);
+const agentLabel = id => (AI.agents && (AI.agents.find(a => a.id === id) || {}).label) || AGENT_LABELS[id] || id;
+const agentFound = id => !!(AI.found && AI.found[id]);
+function providerList(){
+  const list = [];
+  if (sampleFn) list.push({ id: "claude", label: "Claude (in this page)" });
+  if (!IN_CLAUDE){
+    // after connecting: the agents that are installed; before: the common ones
+    const ids = AI.agents ? AI.agents.filter(a => a.found).map(a => a.id) : Object.keys(AGENT_LABELS);
+    if (isLocal(AI.provider) && !ids.includes(agentOf(AI.provider))) ids.push(agentOf(AI.provider));
+    if (!ids.length) ids.push("claude");
+    ids.forEach(id => list.push({ id: "local-" + id, label: agentLabel(id) + " on my computer" }));
+  }
+  list.push({ id: "paste", label: "Any chatbot (copy and paste)" });
+  return list;
+}
 function renderProviders(){
   const sel = $("#aiProvider");
-  const list = PROVIDERS.filter(p => p.show());
+  const list = providerList();
   if (!list.some(p => p.id === AI.provider)) AI.provider = list[0].id;
   sel.innerHTML = list.map(p => `<option value="${p.id}"${p.id === AI.provider ? " selected" : ""}>${esc(p.label)}</option>`).join("");
-  const local = AI.provider.startsWith("local-"), paste = AI.provider === "paste";
+  const local = isLocal(AI.provider), paste = AI.provider === "paste";
   $("#localPanel").hidden = !local; $("#pastePanel").hidden = !paste;
   $("#aiBtn").hidden = paste;
   $("#bridgeUrl").value = AI.bridgeUrl; $("#bridgeToken").value = AI.token;
@@ -877,10 +890,10 @@ function showBridgeStatus(msg, cls){
   const el = $("#bridgeStatus");
   if (msg){ el.textContent = msg; el.className = "bridge-status " + (cls || ""); return; }
   if (!AI.found){ el.textContent = AI.token ? "Not connected yet. Press Connect." : "Start the helper, paste its connection code, then press Connect."; el.className = "bridge-status"; return; }
-  const want = AI.provider === "local-codex" ? "codex" : "claude";
-  const names = [AI.found.claude && "Claude Code", AI.found.codex && "Codex"].filter(Boolean);
-  if (!names.length) showBridgeStatus("Connected, but neither Claude Code nor Codex was found on this computer. Install one and restart the helper.", "bad");
-  else if (!AI.found[want]) showBridgeStatus(`Connected. ${want === "codex" ? "Codex" : "Claude Code"} isn't installed there. Found: ${names.join(", ")}.`, "bad");
+  const want = agentOf(AI.provider);
+  const names = (AI.agents || []).filter(a => a.found).map(a => a.label);
+  if (!names.length) showBridgeStatus("Connected, but no AI agent was found on this computer (Claude Code, Codex, Kiro, Grok, Gemini CLI or GitHub Copilot). Install one and restart the helper.", "bad");
+  else if (!agentFound(want)) showBridgeStatus(`Connected. ${agentLabel(want)} isn't installed there. Found: ${names.join(", ")}.`, "bad");
   else showBridgeStatus(`Connected. Found: ${names.join(", ")}.`, "ok");
 }
 async function bridgeFetch(pathname, opts = {}){
@@ -896,13 +909,17 @@ async function connectBridge(quiet){
   showBridgeStatus("Connecting…");
   try {
     const h = await bridgeFetch("/health");
-    AI.found = h.providers || {};
-    // picked one that isn't installed but the other is: switch to it
-    const want = AI.provider === "local-codex" ? "codex" : "claude", other = want === "codex" ? "claude" : "codex";
-    if (AI.provider.startsWith("local-") && !AI.found[want] && AI.found[other]){
-      AI.provider = other === "codex" ? "local-codex" : "local-claude"; saveAI(); renderProviders();
-      toast(`${want === "codex" ? "Codex" : "Claude Code"} wasn't found, so switched to ${other === "codex" ? "Codex" : "Claude Code"}.`);
+    // newer helpers list every agent; older ones send {claude: true, codex: false}
+    AI.agents = Array.isArray(h.agents) ? h.agents.map(a => ({ id: String(a.id), label: String(a.label || AGENT_LABELS[a.id] || a.id), found: !!a.found }))
+      : Object.entries(h.providers || {}).map(([id, f]) => ({ id, label: AGENT_LABELS[id] || id, found: !!f }));
+    AI.found = Object.fromEntries(AI.agents.map(a => [a.id, a.found]));
+    // picked one that isn't installed but another is: switch to it
+    const want = agentOf(AI.provider), first = AI.agents.find(a => a.found);
+    if (isLocal(AI.provider) && !agentFound(want) && first){
+      AI.provider = "local-" + first.id; saveAI();
+      toast(`${agentLabel(want)} wasn't found, so switched to ${first.label}.`);
     }
+    renderProviders();
     showBridgeStatus();
     return true;
   } catch (e) {
@@ -913,14 +930,14 @@ async function connectBridge(quiet){
     return false;
   }
 }
-$("#aiProvider").addEventListener("change", e => { AI.provider = e.target.value; saveAI(); renderProviders(); if (AI.provider.startsWith("local-") && AI.token && !AI.found) connectBridge(true); });
+$("#aiProvider").addEventListener("change", e => { AI.provider = e.target.value; saveAI(); renderProviders(); if (isLocal(AI.provider) && AI.token && !AI.found) connectBridge(true); });
 $("#bridgeConnect").addEventListener("click", () => connectBridge(false));
 $("#bridgeToken").addEventListener("keydown", e => { if (e.key === "Enter") connectBridge(false); });
 
 (async () => {
   try { sampleFn = await window.claude?.use?.("sample"); } catch (e) { sampleFn = null; }
   renderProviders();
-  if (AI.provider.startsWith("local-") && AI.token) connectBridge(true);
+  if (isLocal(AI.provider) && AI.token) connectBridge(true);
 })();
 renderProviders();
 
@@ -981,18 +998,18 @@ $("#aiBtn").addEventListener("click", async () => {
   const R = lastR || score();
   if (!R.hasJD){ toast("Paste a job description first."); return; }
   if (!S.resume.trim()){ toast("Add your resume first."); return; }
-  const local = AI.provider.startsWith("local-");
+  const local = isLocal(AI.provider);
   if (local && !AI.found && !(await connectBridge(false))) return;
-  if (local){ const want = AI.provider === "local-codex" ? "codex" : "claude"; if (!AI.found[want]){ showBridgeStatus(); $("#aiMsg").textContent = `${want === "codex" ? "Codex" : "Claude Code"} wasn't found on your computer. Pick the other option in the AI menu, or see the README if it is installed somewhere unusual.`; return; } }
+  if (local){ const want = agentOf(AI.provider); if (!agentFound(want)){ showBridgeStatus(); $("#aiMsg").textContent = `${agentLabel(want)} wasn't found on your computer. Pick another option in the AI menu, or see the README if it is installed somewhere unusual.`; return; } }
   if (!local && !sampleFn) return;
   ctl = new AbortController();
   $("#aiBtn").disabled = true; $("#stopBtn").hidden = false;
-  const who = AI.provider === "local-codex" ? "Codex" : AI.provider === "local-claude" ? "Claude Code" : "Claude";
+  const who = local ? agentLabel(agentOf(AI.provider)) : "Claude";
   $("#aiMsg").innerHTML = `<span class="dots">${who} is reading the JD and your resume. This can take a minute</span>`;
   try {
     let res;
     if (local){
-      const out = await bridgeFetch("/suggest", { method: "POST", body: JSON.stringify({ provider: AI.provider === "local-codex" ? "codex" : "claude", prompt: aiPrompt(R) }), signal: ctl.signal });
+      const out = await bridgeFetch("/suggest", { method: "POST", body: JSON.stringify({ provider: agentOf(AI.provider), prompt: aiPrompt(R) }), signal: ctl.signal });
       res = parseAIReply(out && out.text);
       if (!res){ $("#aiMsg").textContent = `${who} answered, but not in the expected format. Try again.`; return; }
     } else {
@@ -1105,7 +1122,7 @@ const CHAT = { log: [], busy: false, ctl: null, awaitingPaste: false };
 const CHIPS = ["Make it 100% ATS", "Add the missing keywords", "Add numbers to my bullets", "Rewrite my summary for this job", "What's my score?", "Accept all changes that fit"];
 function chatVia(){
   const p = AI.provider;
-  return p === "claude" ? "using Claude" : p === "local-claude" ? "using Claude Code on your computer" : p === "local-codex" ? "using Codex on your computer" : "using any chatbot (copy and paste)";
+  return p === "claude" ? "using Claude" : isLocal(p) ? `using ${agentLabel(agentOf(p))} on your computer` : "using any chatbot (copy and paste)";
 }
 function addMsg(role, text, acts){
   const m = { role, text, acts: acts || [] };
@@ -1244,25 +1261,25 @@ async function sendChat(text){
     CHAT.awaitingPaste = true;
     addMsg("bot", "Copy this request into any chatbot (ChatGPT, Gemini, Claude…), then paste its whole reply here as your next message.", [
       { label: "Copy request", run: btn => { const done = () => { btn.textContent = "Copied"; }; try { navigator.clipboard.writeText(prompt).then(done, () => { addMsg("bot", prompt); }); } catch (e) { addMsg("bot", prompt); } } },
-      { label: "Use Claude Code or Codex instead", run: () => { AI.provider = "local-claude"; saveAI(); renderProviders(); unfold("sgBox"); $("#sgBox").scrollIntoView({ behavior: "smooth" }); } }
+      { label: "Use an AI agent on my computer", run: () => { AI.provider = "local-" + (((AI.agents || []).find(a => a.found) || {}).id || "claude"); saveAI(); renderProviders(); unfold("sgBox"); $("#sgBox").scrollIntoView({ behavior: "smooth" }); } }
     ]);
     return;
   }
-  const local = p.startsWith("local-");
+  const local = isLocal(p);
   if (local && !AI.found && !(await connectBridge(true))){
     addMsg("bot", "I can't reach the helper on your computer. Start it with “node bridge/resumefit-bridge.mjs”, paste its connection code under Suggested changes, and press Connect.", [{ label: "Show connection settings", run: () => { unfold("sgBox"); $("#sgBox").scrollIntoView({ behavior: "smooth" }); } }]);
     return;
   }
-  if (local){ const want = p === "local-codex" ? "codex" : "claude"; if (!AI.found[want]){ addMsg("bot", `${want === "codex" ? "Codex" : "Claude Code"} wasn't found on your computer. Pick another option in the AI menu under Suggested changes.`); return; } }
+  if (local){ const want = agentOf(p); if (!agentFound(want)){ addMsg("bot", `${agentLabel(want)} wasn't found on your computer. Pick another option in the AI menu under Suggested changes.`); return; } }
   if (!local && !sampleFn){ addMsg("bot", "No AI is connected. Pick one in the AI menu under Suggested changes."); return; }
   CHAT.busy = true; $("#chatSend").disabled = true;
-  const who = p === "local-codex" ? "Codex" : p === "local-claude" ? "Claude Code" : "Claude";
+  const who = local ? agentLabel(agentOf(p)) : "Claude";
   const thinking = addMsg("bot", `${who} is working on it`); thinking.thinking = true; thinking.acts = [{ label: "Stop", run: () => CHAT.ctl && CHAT.ctl.abort() }]; renderChat();
   CHAT.ctl = new AbortController();
   try {
     let res;
     if (local){
-      const out = await bridgeFetch("/suggest", { method: "POST", body: JSON.stringify({ provider: p === "local-codex" ? "codex" : "claude", prompt }), signal: CHAT.ctl.signal });
+      const out = await bridgeFetch("/suggest", { method: "POST", body: JSON.stringify({ provider: agentOf(p), prompt }), signal: CHAT.ctl.signal });
       res = parseAIReply(out && out.text);
       if (!res && out && out.text) res = { reply: String(out.text).slice(0, 1500), suggestions: [] };
     } else res = await sampleFn.json(prompt, { signal: CHAT.ctl.signal, modelTier: "default" });

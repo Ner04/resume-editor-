@@ -2,8 +2,10 @@
 /*
  * ResumeFit local AI helper
  * -------------------------
- * Lets the ResumeFit page use Claude Code or Codex that is already installed and
- * signed in on this computer. No API key is needed: the CLI uses your own login.
+ * Lets the ResumeFit page use an AI agent that is already installed and signed in
+ * on this computer: Claude Code, Codex, Kiro, Grok, Gemini CLI or GitHub Copilot,
+ * or any other command-line AI you add in bridge/agents.json.
+ * No API key is needed: each CLI uses your own login.
  *
  *   node bridge/resumefit-bridge.mjs
  *
@@ -51,22 +53,43 @@ const jsonArgs = (name, fallback) => {
   catch { console.warn(`Ignoring ${name}: it must be a JSON array of strings.`); return fallback; }
 };
 
-// {OUT} is replaced with a temporary file path. The prompt is always sent on stdin.
-const PROVIDERS = {
-  claude: {
-    label: "Claude Code",
-    bin: process.env.RESUMEFIT_CLAUDE_BIN || "claude",
-    args: jsonArgs("RESUMEFIT_CLAUDE_ARGS", [
-      "-p", "--output-format", "text",
-      "--disallowedTools", "Bash", "Edit", "Write", "MultiEdit", "NotebookEdit", "Read", "Glob", "Grep", "WebFetch", "WebSearch", "Task"
-    ])
-  },
-  codex: {
-    label: "Codex",
-    bin: process.env.RESUMEFIT_CODEX_BIN || "codex",
-    args: jsonArgs("RESUMEFIT_CODEX_ARGS", ["exec", "--skip-git-repo-check", "--sandbox", "read-only", "-o", "{OUT}", "-"])
-  }
-};
+/*
+ * The agents this helper knows. In "args":
+ *   {PROMPT}  is replaced by the prompt (otherwise the prompt is sent on stdin)
+ *   {OUT}     is replaced by a temporary file the agent writes its answer to
+ * Every agent runs in an empty temporary folder, with its tools off or read-only where the CLI allows it.
+ * Override any agent with RESUMEFIT_<ID>_BIN and RESUMEFIT_<ID>_ARGS (JSON array), e.g. RESUMEFIT_KIRO_BIN.
+ * Add your own in bridge/agents.json (see bridge/agents.example.json).
+ */
+const BUILT_IN = [
+  { id: "claude", label: "Claude Code", bin: "claude",
+    args: ["-p", "--output-format", "text", "--disallowedTools", "Bash", "Edit", "Write", "MultiEdit", "NotebookEdit", "Read", "Glob", "Grep", "WebFetch", "WebSearch", "Task"] },
+  { id: "codex", label: "Codex", bin: "codex",
+    args: ["exec", "--skip-git-repo-check", "--sandbox", "read-only", "-o", "{OUT}", "-"] },
+  // Kiro CLI headless mode: no --trust-tools, so it can't run tools
+  { id: "kiro", label: "Kiro", bin: "kiro-cli", args: ["chat", "--no-interactive"] },
+  // Grok Build CLI: without --always-approve it can't run tools on its own
+  { id: "grok", label: "Grok", bin: "grok", args: ["-p", "{PROMPT}", "--output-format", "plain", "--no-auto-update"] },
+  // Gemini CLI: the prompt arrives on stdin, -p adds the final instruction
+  { id: "gemini", label: "Gemini CLI", bin: "gemini", args: ["-p", "Follow the instructions in the text above. Reply with the JSON only."] },
+  // GitHub Copilot CLI: tools need permission, which isn't given; -s prints only the answer
+  { id: "copilot", label: "GitHub Copilot", bin: "copilot", args: ["-p", "{PROMPT}", "-s"] }
+];
+
+function loadCustomAgents() {
+  const file = process.env.RESUMEFIT_AGENTS || path.join(path.dirname(fileURLToPath(import.meta.url)), "agents.json");
+  if (!fs.existsSync(file)) return [];
+  try {
+    const list = JSON.parse(fs.readFileSync(file, "utf8")).agents || [];
+    return list.filter(a => a && /^[a-z0-9_-]{1,30}$/i.test(a.id) && typeof a.bin === "string" && Array.isArray(a.args))
+      .map(a => ({ id: a.id.toLowerCase(), label: String(a.label || a.id), bin: a.bin, args: a.args.map(String), custom: true }));
+  } catch (e) { console.warn(`Couldn't read ${file}: ${e.message}`); return []; }
+}
+const PROVIDERS = {};
+for (const a of [...BUILT_IN, ...loadCustomAgents()]) {
+  const key = a.id.toUpperCase().replace(/-/g, "_");
+  PROVIDERS[a.id] = { ...a, bin: process.env[`RESUMEFIT_${key}_BIN`] || a.bin, args: jsonArgs(`RESUMEFIT_${key}_ARGS`, a.args), pinned: !!process.env[`RESUMEFIT_${key}_BIN`] };
+}
 
 const quoteWin = a => (/[\s"&|<>^]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a);
 function tryVersion(bin) {
@@ -76,7 +99,7 @@ function tryVersion(bin) {
   } catch { return null; }
 }
 // Places these CLIs are commonly installed when they aren't on this terminal's PATH
-function candidates(name) {
+function candidates(id, name) {
   const home = os.homedir(), out = [];
   if (IS_WIN) {
     const ad = process.env.APPDATA || path.join(home, "AppData", "Roaming");
@@ -85,13 +108,13 @@ function candidates(name) {
   }
   const dirs = [path.join(home, ".local", "bin"), "/opt/homebrew/bin", "/usr/local/bin", path.join(home, ".npm-global", "bin"),
     path.join(home, ".bun", "bin"), path.join(home, ".volta", "bin"), path.join(home, ".yarn", "bin"), path.join(home, "Library", "pnpm")];
-  if (name === "claude") dirs.push(path.join(home, ".claude", "local"));
+  if (id === "claude") dirs.push(path.join(home, ".claude", "local"));
   try { // every Node version installed with nvm
     const nvm = path.join(process.env.NVM_DIR || path.join(home, ".nvm"), "versions", "node");
     for (const v of fs.readdirSync(nvm)) dirs.push(path.join(nvm, v, "bin"));
   } catch {}
   for (const d of dirs) out.push(path.join(d, name));
-  if (name === "codex") out.push("/Applications/Codex.app/Contents/Resources/codex", "/Applications/Codex.app/Contents/MacOS/codex");
+  if (id === "codex") out.push("/Applications/Codex.app/Contents/Resources/codex", "/Applications/Codex.app/Contents/MacOS/codex");
   // ask the login shell, which loads ~/.zshrc or ~/.bashrc
   try {
     const sh = process.env.SHELL || "/bin/zsh";
@@ -104,8 +127,8 @@ function candidates(name) {
 function detect(id, p) {
   const direct = tryVersion(p.bin);
   if (direct) return direct;
-  if (process.env[`RESUMEFIT_${id.toUpperCase()}_BIN`]) return null; // the user chose a path; don't guess
-  for (const c of candidates(id)) {
+  if (p.pinned || path.isAbsolute(p.bin)) return null; // the user chose a path; don't guess
+  for (const c of candidates(id, path.basename(p.bin))) {
     if (!fs.existsSync(c)) continue;
     const v = tryVersion(c);
     if (v) { p.bin = c; return v + "  (" + c + ")"; }
@@ -121,9 +144,16 @@ function runCli(id, prompt) {
   return new Promise((resolve, reject) => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "resumefit-"));
     const out = path.join(dir, "answer.txt");
-    let args = p.args.map(a => (a === "{OUT}" ? out : a));
-    if (IS_WIN) args = args.map(quoteWin);
-    const child = spawn(p.bin, args, { cwd: dir, shell: IS_WIN, windowsHide: true, stdio: ["pipe", "pipe", "pipe"], env: ENV });
+    const viaArg = p.args.some(a => a.includes("{PROMPT}"));
+    let args = p.args.map(a => a.replace("{OUT}", out).replace("{PROMPT}", prompt));
+    let bin = p.bin, shell = IS_WIN;
+    if (IS_WIN && viaArg) {
+      // cmd.exe can't pass a long multi-line prompt, so run the .exe directly
+      const exe = (spawnSync("where", [p.bin], { encoding: "utf8" }).stdout || "").split(/\r?\n/).find(l => /\.exe$/i.test(l.trim()));
+      if (!exe) { fs.rmSync(dir, { recursive: true, force: true }); return reject(Object.assign(new Error(`${p.label} takes the prompt as an argument, which doesn't work through a Windows .cmd launcher. Use WSL, or an agent that reads stdin (Claude Code, Codex, Kiro, Gemini CLI).`), { code: "cli_failed" })); }
+      bin = exe.trim(); shell = false;
+    } else if (IS_WIN) args = args.map(quoteWin);
+    const child = spawn(bin, args, { cwd: dir, shell, windowsHide: true, stdio: ["pipe", "pipe", "pipe"], env: ENV });
     let stdout = "", stderr = "", done = false;
     const cap = (s, d) => (s.length > 2e6 ? s : s + d);
     child.stdout.on("data", d => { stdout = cap(stdout, d.toString()); });
@@ -139,6 +169,7 @@ function runCli(id, prompt) {
       let text = "";
       try { if (fs.existsSync(out)) text = fs.readFileSync(out, "utf8"); } catch {}
       if (!text.trim()) text = stdout;
+      text = text.replace(/\x1b\[[0-9;?]*[ -\/]*[@-~]/g, "").replace(/\x1b\][^\x07]*\x07/g, ""); // strip terminal colours
       if (code !== 0 && !text.trim()) {
         const why = (stderr || stdout).trim().split("\n").slice(-3).join(" ").slice(0, 300) || `exit code ${code}`;
         return finish(Object.assign(new Error(why), { code: "cli_failed" }));
@@ -146,7 +177,7 @@ function runCli(id, prompt) {
       finish(null, text.trim());
     });
     child.stdin.on("error", () => {});
-    child.stdin.end(prompt);
+    child.stdin.end(viaArg ? "" : prompt);
   });
 }
 
@@ -191,7 +222,8 @@ const server = http.createServer((req, res) => {
 
   if (req.method === "GET" && route === "/health") {
     if (!tokenOk(req)) return send(res, 401, { error: "bad_token", message: "Connection code missing or wrong." });
-    return send(res, 200, { ok: true, app: "resumefit-bridge", version: VERSION, providers: { claude: !!found.claude, codex: !!found.codex } });
+    return send(res, 200, { ok: true, app: "resumefit-bridge", version: VERSION, providers: Object.fromEntries(Object.keys(PROVIDERS).map(id => [id, !!found[id]])),
+      agents: Object.values(PROVIDERS).map(p => ({ id: p.id, label: p.label, found: !!found[p.id] })) });
   }
 
   if (req.method === "POST" && route === "/suggest") {
@@ -203,7 +235,7 @@ const server = http.createServer((req, res) => {
       let body;
       try { body = JSON.parse(Buffer.concat(chunks).toString("utf8")); } catch { return send(res, 400, { error: "bad_request", message: "Body must be JSON." }); }
       const id = body && body.provider;
-      if (!PROVIDERS[id]) return send(res, 400, { error: "bad_request", message: "provider must be 'claude' or 'codex'." });
+      if (!PROVIDERS[id]) return send(res, 400, { error: "bad_request", message: `provider must be one of: ${Object.keys(PROVIDERS).join(", ")}.` });
       if (!found[id]) return send(res, 400, { error: "not_installed", message: `${PROVIDERS[id].label} isn't installed or isn't on PATH.` });
       if (typeof body.prompt !== "string" || !body.prompt.trim()) return send(res, 400, { error: "bad_request", message: "prompt is empty." });
       if (busy) return send(res, 429, { error: "busy", message: "Already working on a request." });
@@ -233,23 +265,27 @@ server.on("error", e => {
 });
 
 server.listen(PORT, HOST, () => {
-  const tick = v => (v ? "✓ " + v : "✗ not found");
   const hasApp = fs.existsSync(path.join(APP_ROOT, "index.html"));
+  const w = Math.max(...Object.values(PROVIDERS).map(p => p.label.length)) + 3;
+  const rows = Object.values(PROVIDERS).map(p => `  ${p.label.padEnd(w)}${found[p.id] ? "✓ " + found[p.id] : "✗ not found"}`).join("\n");
+  const ok = Object.values(PROVIDERS).filter(p => found[p.id]);
   console.log(`
 ResumeFit local AI helper is running.
 
-  Claude Code   ${tick(found.claude)}
-  Codex         ${tick(found.codex)}
+${rows}
 
   Connection code:  ${TOKEN}
 ${hasApp ? `
   Open ResumeFit already connected:
   http://${HOST}:${PORT}/#bridge=${TOKEN}
 ` : ""}
-Using ResumeFit from another address (for example GitHub Pages)? Choose
-"Claude Code on my computer" or "Codex on my computer" under Suggested changes,
+Using ResumeFit from another address (for example GitHub Pages)? Pick
+"${ok[0] ? ok[0].label : "Claude Code"} on my computer" in the AI menu under Suggested changes,
 then paste the connection code. Keep this window open. Press Ctrl+C to stop.
 `);
-  if (!found.claude && !found.codex) console.log("Neither Claude Code nor Codex was found. Install one, sign in once in a terminal, then restart this helper.\n");
-  for (const id of ["claude", "codex"]) if (!found[id]) console.log(`If ${PROVIDERS[id].label} is installed but shows "not found", start the helper with its path:\n  RESUMEFIT_${id.toUpperCase()}_BIN=/full/path/to/${id} node bridge/resumefit-bridge.mjs\n`);
+  if (!ok.length) console.log("No AI agent was found. Install one (Claude Code, Codex, Kiro, Grok, Gemini CLI or GitHub Copilot), sign in once in a terminal, then restart this helper.\n");
+  console.log(`Installed an agent but it shows "not found"? Start the helper with its path, e.g.
+  RESUMEFIT_KIRO_BIN="$(which kiro-cli)" node bridge/resumefit-bridge.mjs
+Other AI command-line tools can be added in bridge/agents.json (see bridge/agents.example.json).
+`);
 });
