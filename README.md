@@ -6,6 +6,7 @@
 - **Keyword matching**: every skill in the job description, marked found or missing, including versions like `Core Java (8/17)`, `Java 1.8`, `Spring Boot 3` or `Angular 15+`.
 - **Suggested changes you approve one by one**: nothing in your resume changes until you press **Accept**.
 - **Edits inside your original PDF**: changed lines keep their position, font, size and colour. Everything else stays exactly as it was.
+- **A resume assistant** you can give commands to, like "make it 100% ATS" or "add numbers to my bullets". It turns them into edits you can accept.
 
 It runs entirely in your browser. There is no server, sign-up or database.
 
@@ -26,17 +27,41 @@ node bridge/resumefit-bridge.mjs
 
 ## How to use it
 
-1. Paste the job description on the left. The keyword list and score update as you type.
-2. Click **Upload resume (PDF)**. Your resume appears on the right in its original layout.
+1. When you open the app, a popup asks for your resume. Choose your PDF or drop it in. It appears on the right in its original layout. You can also paste text, try an example, or cancel and upload later.
+2. Paste the job description on the left. The keyword list and score update as you type.
 3. Review the **Suggested changes**. Each card shows the old line crossed out and the new line in green. Press **Accept**, **Edit first** or **Skip**.
-4. Click any line on the page to edit it yourself. Each edit shows whether the new text fits the space.
-5. Click **Download PDF** to get your original PDF with only the changed lines replaced. **Download clean layout** gives you a plain single-column version instead.
+4. Or open the **Resume assistant** (bottom right) and tell it what you want. Its edits land in Suggested changes, and **Accept all** applies every one that fits.
+5. Click any line on the page to edit it yourself. Each edit shows whether the new text fits the space.
+6. Click **Download PDF** to get your original PDF with only the changed lines replaced. **Download clean layout** gives you a plain single-column version instead.
+
+Use the arrow on the score, Job description and Suggested changes panels to collapse them, so your resume and the part you're working on sit side by side. The resume stays in view while you scroll.
 
 Only add skills you have actually used. Recruiters ask about everything on your resume.
+
+<img src="docs/screenshots/start.png" alt="Popup asking for the resume when the app opens" width="720">
 
 | Review suggested changes | Edit any line in place |
 | --- | --- |
 | ![Suggested changes from Claude Code, each showing the old line, the new line and whether it fits the layout](docs/screenshots/suggestions.png) | ![Line editor open on the Languages line, showing that the edit fits at the original size](docs/screenshots/edit-line.png) |
+
+## Resume assistant
+
+Click **Resume assistant** at the bottom right and type what you want, or tap a suggestion:
+
+- "Make it 100% ATS"
+- "Add the missing keywords"
+- "Add numbers to my bullets"
+- "Rewrite my summary for this job"
+
+The assistant uses whichever AI is picked in the **AI** menu. Its edits appear as cards in Suggested changes. You can review them one by one, or press **Accept all** to apply every edit that fits your layout. They count as a single step, so one **Undo** reverts them all.
+
+It is honest about limits: no resume can guarantee a 100% ATS pass. It won't add skills your resume doesn't show. It asks you to confirm them first.
+
+A few commands work without any AI: "What's my score?", "Which keywords are missing?", "Accept all changes that fit" and "Undo".
+
+With the copy-and-paste option, the assistant gives you a request to copy into any chatbot. Paste the chatbot's reply back into the chat.
+
+![The resume assistant beside the resume, after "Make it 100% ATS"](docs/screenshots/assistant.png)
 
 ## AI suggestions: three ways
 
@@ -79,8 +104,14 @@ A web page can't start programs on your computer by itself. `bridge/resumefit-br
 | `RESUMEFIT_TOKEN` | random | A fixed connection code, so you don't have to paste a new one each time |
 | `RESUMEFIT_ORIGINS` | any | Only allow these sites, e.g. `https://ner04.github.io` |
 | `RESUMEFIT_TIMEOUT` | `240` | Seconds to wait for an answer |
-| `RESUMEFIT_CLAUDE_BIN` / `RESUMEFIT_CODEX_BIN` | `claude` / `codex` | Path to the CLI if it isn't on your PATH |
+| `RESUMEFIT_CLAUDE_BIN` / `RESUMEFIT_CODEX_BIN` | `claude` / `codex` | Path to the CLI if it isn't on your PATH. The helper also checks common install folders (Homebrew, npm, nvm, `~/.local/bin`) and your shell's PATH |
 | `RESUMEFIT_CLAUDE_ARGS` / `RESUMEFIT_CODEX_ARGS` | see the script | JSON array to replace the CLI arguments, if a future CLI version changes its flags |
+
+**Codex or Claude Code shows "not found" but is installed?** Find its path with `which codex` (or `which claude`) in a normal terminal, then start the helper with it:
+```bash
+RESUMEFIT_CODEX_BIN="$(which codex)" node bridge/resumefit-bridge.mjs
+```
+The Codex desktop app and the Codex command-line tool are separate. The helper needs the command-line tool (`npm i -g @openai/codex` or `brew install codex`).
 
 **Browser note:** Chrome and Edge let the GitHub Pages version talk to the helper. Safari and some Firefox setups block https pages from calling `http://127.0.0.1`. If **Connect** fails there, open the link the helper prints instead.
 

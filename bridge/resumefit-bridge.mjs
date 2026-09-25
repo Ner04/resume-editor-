@@ -69,14 +69,51 @@ const PROVIDERS = {
 };
 
 const quoteWin = a => (/[\s"&|<>^]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a);
-function detect(p) {
+function tryVersion(bin) {
   try {
-    const r = spawnSync(p.bin, ["--version"], { env: ENV, shell: IS_WIN, timeout: 20000, encoding: "utf8", windowsHide: true });
-    return r.status === 0 ? (r.stdout || r.stderr || "").trim().split("\n")[0] : null;
+    const r = spawnSync(bin, ["--version"], { env: ENV, shell: IS_WIN, timeout: 20000, encoding: "utf8", windowsHide: true });
+    return r.status === 0 ? ((r.stdout || r.stderr || "").trim().split("\n")[0] || "installed") : null;
   } catch { return null; }
 }
+// Places these CLIs are commonly installed when they aren't on this terminal's PATH
+function candidates(name) {
+  const home = os.homedir(), out = [];
+  if (IS_WIN) {
+    const ad = process.env.APPDATA || path.join(home, "AppData", "Roaming");
+    out.push(path.join(ad, "npm", name + ".cmd"), path.join(home, ".local", "bin", name + ".exe"));
+    return out;
+  }
+  const dirs = [path.join(home, ".local", "bin"), "/opt/homebrew/bin", "/usr/local/bin", path.join(home, ".npm-global", "bin"),
+    path.join(home, ".bun", "bin"), path.join(home, ".volta", "bin"), path.join(home, ".yarn", "bin"), path.join(home, "Library", "pnpm")];
+  if (name === "claude") dirs.push(path.join(home, ".claude", "local"));
+  try { // every Node version installed with nvm
+    const nvm = path.join(process.env.NVM_DIR || path.join(home, ".nvm"), "versions", "node");
+    for (const v of fs.readdirSync(nvm)) dirs.push(path.join(nvm, v, "bin"));
+  } catch {}
+  for (const d of dirs) out.push(path.join(d, name));
+  if (name === "codex") out.push("/Applications/Codex.app/Contents/Resources/codex", "/Applications/Codex.app/Contents/MacOS/codex");
+  // ask the login shell, which loads ~/.zshrc or ~/.bashrc
+  try {
+    const sh = process.env.SHELL || "/bin/zsh";
+    const r = spawnSync(sh, ["-lic", `command -v ${name}`], { timeout: 8000, encoding: "utf8" });
+    const hit = (r.stdout || "").trim().split("\n").pop();
+    if (hit && hit.startsWith("/")) out.unshift(hit);
+  } catch {}
+  return out;
+}
+function detect(id, p) {
+  const direct = tryVersion(p.bin);
+  if (direct) return direct;
+  if (process.env[`RESUMEFIT_${id.toUpperCase()}_BIN`]) return null; // the user chose a path; don't guess
+  for (const c of candidates(id)) {
+    if (!fs.existsSync(c)) continue;
+    const v = tryVersion(c);
+    if (v) { p.bin = c; return v + "  (" + c + ")"; }
+  }
+  return null;
+}
 const found = {};
-for (const [id, p] of Object.entries(PROVIDERS)) found[id] = detect(p);
+for (const [id, p] of Object.entries(PROVIDERS)) found[id] = detect(id, p);
 
 let busy = false;
 function runCli(id, prompt) {
@@ -214,4 +251,5 @@ Using ResumeFit from another address (for example GitHub Pages)? Choose
 then paste the connection code. Keep this window open. Press Ctrl+C to stop.
 `);
   if (!found.claude && !found.codex) console.log("Neither Claude Code nor Codex was found. Install one, sign in once in a terminal, then restart this helper.\n");
+  for (const id of ["claude", "codex"]) if (!found[id]) console.log(`If ${PROVIDERS[id].label} is installed but shows "not found", start the helper with its path:\n  RESUMEFIT_${id.toUpperCase()}_BIN=/full/path/to/${id} node bridge/resumefit-bridge.mjs\n`);
 });
