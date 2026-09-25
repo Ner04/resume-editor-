@@ -10,7 +10,7 @@
 
 It runs entirely in your browser. There is no server, sign-up or database.
 
-![ResumeFit: ATS score and keyword matches on the left, the resume in its original layout on the right](docs/screenshots/overview.png)
+![ResumeFit in dark mode: ATS score and job description keywords on the left, a resume in its original layout on the right with the line editor open](docs/screenshots/overview.png)
 
 ## Use it
 
@@ -139,7 +139,6 @@ A PDF doesn't store paragraphs. It stores letters placed at exact positions. Res
 - Scanned (image-only) and password-protected PDFs can't be edited in place. You can still paste the text.
 - A letter your resume never uses (a capital `K`, say) is drawn in the closest standard font.
 
-The screenshots use a made-up sample resume.
 
 ## Scoring
 
