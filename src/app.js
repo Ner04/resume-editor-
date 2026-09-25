@@ -749,8 +749,16 @@ AI.found = null;
 const defaultBridge = () => /^(127\.0\.0\.1|localhost)$/.test(location.hostname) && /^https?:$/.test(location.protocol) ? location.origin : "http://127.0.0.1:8787";
 if (!AI.bridgeUrl) AI.bridgeUrl = defaultBridge();
 // a connection code handed over in the link: .../#bridge=CODE
-const hashTok = (location.hash.match(/bridge=([\w-]{8,})/) || [])[1];
-if (hashTok){ AI.token = hashTok; AI.provider = AI.provider && AI.provider.startsWith("local-") ? AI.provider : "local-claude"; AI.bridgeUrl = defaultBridge(); try { history.replaceState(null, "", location.pathname + location.search); } catch (e) {} }
+function readHashToken(){
+  const tok = (location.hash.match(/bridge=([\w-]{8,})/) || [])[1];
+  if (!tok) return false;
+  AI.token = tok; AI.provider = AI.provider && AI.provider.startsWith("local-") ? AI.provider : "local-claude"; AI.bridgeUrl = defaultBridge(); AI.found = null;
+  try { history.replaceState(null, "", location.pathname + location.search); } catch (e) {}
+  return true;
+}
+readHashToken();
+// the helper's link opened in a tab that already had ResumeFit open
+window.addEventListener("hashchange", () => { if (readHashToken()){ saveAI(); renderProviders(); connectBridge(false); } });
 function saveAI(){ try { localStorage.setItem("resumefit.ai", JSON.stringify({ provider: AI.provider, bridgeUrl: AI.bridgeUrl, token: AI.token })); } catch (e) {} }
 
 const PROVIDERS = [

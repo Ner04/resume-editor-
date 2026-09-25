@@ -360,14 +360,14 @@ const RFPDF = (() => {
     const has = ch => ch === " " || uni2code.has(ch);
     const wordW = w => { let t = 0; for (const ch of w) t += widthOf(uni2code.get(ch)); return t; };
     return {
-      native: true, res: resName, spaceW,
+      native: true, res: resName, spaceW, hasSpace: spaceCode !== undefined && widthOf(spaceCode) > 0,
       has, canEncode: text => [...text].every(has),
       widthOfTextAtSize(text, size) {
         let t = 0; const words = text.split(" ");
         words.forEach((w, k) => { t += wordW(w); if (k < words.length - 1) t += spaceW; });
         return t * size / 1000;
       },
-      hex: w => [...w].map(ch => uni2code.get(ch).toString(16).padStart(codeLen * 2, "0")).join(""),
+      hex: w => [...w].map(ch => (ch === " " && spaceCode !== undefined ? spaceCode : uni2code.get(ch)).toString(16).padStart(codeLen * 2, "0")).join(""),
       wordW
     };
   }
@@ -428,7 +428,8 @@ const RFPDF = (() => {
       draw(PDFLib, page, text, x, y, size, color) {
         const groups = [];
         for (const ch of text) {
-          const k = ch === " " ? " " : enc.has(ch) ? "n" : "s";
+          // spaces go inside the same text run when the font has a space glyph, so readers see whole phrases
+          const k = ch === " " ? (enc.hasSpace ? "n" : " ") : enc.has(ch) ? "n" : "s";
           const g = groups[groups.length - 1];
           if (g && g.k === k) g.s += ch; else groups.push({ k, s: ch });
         }
@@ -611,10 +612,17 @@ const RFPDF = (() => {
         }
         if (part) {
           let x = r.centered ? r.center - tw / 2 : r.textX;
+          // join words that share a style into one run, spaces included
+          const runs = [];
           part.forEach((w, wi) => {
-            w.segs.forEach(g => { g.ad.draw(PDFLib, page, g.s, x, r.y, size, r.color); x += g.ad.width(g.s, size); });
-            if (wi < part.length - 1) x += spW(w, size);
+            w.segs.forEach((g, gi) => {
+              const last = runs[runs.length - 1];
+              const gap = gi === 0 && wi > 0 ? " " : "";
+              if (last && last.ad === g.ad && (!gap || part[wi - 1].spaceAd === g.ad)) last.s += gap + g.s;
+              else { if (gap && last) last.trail = (last.trail || 0) + spW(part[wi - 1], size); runs.push({ ad: g.ad, s: g.s }); }
+            });
           });
+          runs.forEach(rn => { rn.ad.draw(PDFLib, page, rn.s, x, r.y, size, r.color); x += rn.ad.width(rn.s, size) + (rn.trail || 0); });
         }
         if (ri === 0) report.push({ line: c.i, removed, native: c.fit.native });
       });
