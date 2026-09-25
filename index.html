@@ -1,0 +1,307 @@
+<title>ResumeFit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap">
+<style>
+:root{
+  --ground:#EEF1F5; --panel:#FFFFFF; --paper:#FFFFFF; --ink:#141B24; --ink-2:#4A5566; --ink-3:#7A8699;
+  --line:#D8DEE7; --line-2:#E7EBF1;
+  --accent:#2448C8; --accent-soft:#E6ECFD; --on-accent:#FFFFFF;
+  --good:#17804F; --good-soft:#DFF3E8; --warn:#A5660A; --warn-soft:#FBEFD9; --bad:#B9372F; --bad-soft:#FBE4E1;
+  --mark:#FFF1A8;
+  --shadow:0 1px 2px rgba(20,27,36,.06),0 8px 24px rgba(20,27,36,.07);
+  --f-ui:"Instrument Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-disp:"Bricolage Grotesque","Instrument Sans",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --f-paper:"Source Serif 4",Georgia,"Times New Roman",serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  color-scheme:dark;
+  --ground:#0E131A; --panel:#161D27; --paper:#1B2330; --ink:#E8EDF4; --ink-2:#A9B4C4; --ink-3:#7D8898;
+  --line:#2A3443; --line-2:#222B38; --accent:#7F9CFF; --accent-soft:#1E2A4D; --on-accent:#0B1020;
+  --good:#4CC58A; --good-soft:#15342A; --warn:#E3A84A; --warn-soft:#3A2D14; --bad:#F07A70; --bad-soft:#3E1D1B;
+  --mark:#5A4E12; --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.25);
+}}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --ground:#0E131A; --panel:#161D27; --paper:#1B2330; --ink:#E8EDF4; --ink-2:#A9B4C4; --ink-3:#7D8898;
+  --line:#2A3443; --line-2:#222B38; --accent:#7F9CFF; --accent-soft:#1E2A4D; --on-accent:#0B1020;
+  --good:#4CC58A; --good-soft:#15342A; --warn:#E3A84A; --warn-soft:#3A2D14; --bad:#F07A70; --bad-soft:#3E1D1B;
+  --mark:#5A4E12; --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.25);
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--ground);color:var(--ink);font:14px/1.5 var(--f-ui);padding:16px 20px 32px}
+.app{max-width:1440px;margin:0 auto;display:grid;gap:16px}
+button{font:inherit;cursor:pointer}
+button:focus-visible,textarea:focus-visible,label.btn:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:7px 12px;border-radius:8px;font-weight:500;font-size:13px;white-space:nowrap}
+.btn:hover{border-color:var(--ink-3)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn.primary:hover{filter:brightness(1.07)}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--ink-2)}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.btn input{display:none}
+
+/* header */
+.top{display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;justify-content:space-between}
+.brand{display:flex;align-items:baseline;gap:10px}
+.brand h1{font:700 22px/1 var(--f-disp);letter-spacing:-.01em;margin:0}
+.brand span{color:var(--ink-3);font-size:13px}
+.top .actions{display:flex;flex-wrap:wrap;gap:8px}
+
+.scorebar{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:16px 18px;display:grid;grid-template-columns:auto minmax(0,1fr) minmax(0,1.3fr);gap:18px 26px;align-items:center}
+.ring{position:relative;width:112px;height:112px}
+.ring svg{width:112px;height:112px;transform:rotate(-90deg)}
+.ring .n{position:absolute;inset:0;display:grid;place-content:center;text-align:center}
+.ring .n b{font:700 32px/1 var(--f-disp);font-variant-numeric:tabular-nums}
+.ring .n small{font-size:11px;color:var(--ink-3);letter-spacing:.06em;text-transform:uppercase;margin-top:2px}
+.verdict{font:600 16px/1.3 var(--f-disp);margin:0 0 10px;text-wrap:balance}
+.subs{display:grid;gap:7px}
+.sub{display:grid;grid-template-columns:110px minmax(0,1fr) 38px;gap:10px;align-items:center;font-size:12.5px}
+.sub .lbl{color:var(--ink-2)}
+.sub .trk{height:6px;border-radius:3px;background:var(--line-2);overflow:hidden}
+.sub .trk i{display:block;height:100%;border-radius:3px;background:var(--accent);transition:width .4s}
+.sub .v{font-family:var(--f-mono);font-size:12px;text-align:right;font-variant-numeric:tabular-nums}
+.review{margin:0;padding:0;list-style:none;display:grid;gap:6px;font-size:13px}
+.review li{display:grid;grid-template-columns:14px minmax(0,1fr);gap:8px;align-items:start}
+.review li::before{content:"";width:8px;height:8px;border-radius:50%;margin-top:6px;background:var(--ink-3)}
+.review li.good::before{background:var(--good)}
+.review li.warn::before{background:var(--warn)}
+.review li.bad::before{background:var(--bad)}
+.review h3{margin:0 0 6px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+
+/* panes */
+.split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.08fr);gap:16px;align-items:start}
+.col{display:grid;gap:16px;min-width:0}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);min-width:0}
+.box-h{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--line-2)}
+.box-h h2{margin:0;font:600 15px/1.2 var(--f-disp)}
+.box-h .hint{color:var(--ink-3);font-size:12px}
+.box-b{padding:14px 16px;display:grid;gap:12px}
+textarea{width:100%;border:1px solid var(--line);border-radius:10px;background:var(--ground);color:var(--ink);font:13px/1.55 var(--f-ui);padding:10px 12px;resize:vertical}
+#jd{min-height:200px;max-height:420px}
+.kw-group{display:grid;gap:6px}
+.kw-group h4{margin:0;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);font-weight:600;display:flex;gap:8px;align-items:center}
+.kw-group h4 em{font-style:normal;font-family:var(--f-mono);letter-spacing:0;color:var(--ink-2)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-size:12px;padding:3px 9px;border-radius:999px;border:1px solid transparent;display:inline-flex;gap:5px;align-items:center}
+.chip.hit{background:var(--good-soft);color:var(--good)}
+.chip.miss{background:var(--warn-soft);color:var(--warn)}
+.chip.soft{border-style:dashed}
+.chip.hit::before{content:"✓";font-size:11px}
+.chip.miss::before{content:"+";font-size:12px;font-weight:600}
+.meta{font-size:12px;color:var(--ink-2);display:flex;gap:14px;flex-wrap:wrap}
+.meta b{font-family:var(--f-mono);font-weight:500}
+
+/* suggestions */
+.tabs{display:flex;gap:4px;background:var(--ground);padding:3px;border-radius:9px}
+.tabs button{border:0;background:transparent;color:var(--ink-2);padding:5px 10px;border-radius:7px;font-size:12.5px;font-weight:500}
+.tabs button[aria-pressed="true"]{background:var(--panel);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.sugs{display:grid;gap:10px;max-height:640px;overflow:auto;padding-right:2px}
+.sug{border:1px solid var(--line);border-radius:11px;padding:11px 12px;display:grid;gap:8px;background:var(--panel)}
+.sug:hover{border-color:var(--accent)}
+.sug .tag{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;font-weight:600;color:var(--ink-3);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.sug .tag .src{color:var(--accent)}
+.diff{display:grid;gap:4px;font-family:var(--f-paper);font-size:13.5px;line-height:1.45}
+.diff .old{background:var(--bad-soft);color:var(--ink);padding:5px 8px;border-radius:6px;text-decoration:line-through;text-decoration-color:var(--bad);text-decoration-thickness:1px}
+.diff .new{background:var(--good-soft);color:var(--ink);padding:5px 8px;border-radius:6px}
+.diff .lead{font-family:var(--f-mono);font-size:11px;margin-right:6px;color:var(--ink-3);text-decoration:none;display:inline-block}
+.sug .why{font-size:12.5px;color:var(--ink-2);margin:0}
+.sug .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.sug.done{opacity:.7}
+.sug.done .row{display:none}
+.state{font-size:12px;font-weight:600}
+.state.ok{color:var(--good)}
+.state.no{color:var(--ink-3)}
+.empty{color:var(--ink-3);font-size:13px;padding:14px 4px;text-align:center}
+.ai-status{font-size:12.5px;color:var(--ink-2);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.ai-pick{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-2);font-weight:500}
+.ai-pick select{font:inherit;font-size:13px;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 8px;max-width:240px}
+.ai-panel{display:grid;gap:8px;border:1px dashed var(--line);border-radius:10px;padding:10px 12px;background:var(--ground)}
+.ai-panel .note{margin:0}
+.ai-panel code{font-family:var(--f-mono);font-size:11.5px;background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:1px 5px}
+.ai-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.ai-row input{flex:1 1 150px;min-width:0;font:13px var(--f-mono);color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 9px}
+#promptBox,#pasteBox{min-height:90px;font-size:12px;background:var(--panel)}
+.bridge-status{font-size:12.5px;color:var(--ink-2)}
+.bridge-status.ok{color:var(--good)} .bridge-status.bad{color:var(--bad)}
+.ai-msg{font-size:12.5px;color:var(--ink-2)}
+.dots::after{content:"";animation:dots 1.2s steps(4) infinite}
+@keyframes dots{0%{content:""}25%{content:"."}50%{content:".."}75%{content:"..."}}
+@media (prefers-reduced-motion:reduce){.dots::after{animation:none;content:"..."}.sub .trk i,.ring circle{transition:none}}
+
+/* resume paper */
+.paper-wrap{padding:18px;background:var(--line-2);border-radius:0 0 14px 14px}
+.paper{background:var(--paper);color:var(--ink);font-family:var(--f-paper);max-width:760px;margin:0 auto;padding:40px 46px;box-shadow:0 1px 3px rgba(0,0,0,.12);min-height:600px;font-size:13.5px;line-height:1.5}
+.paper h1{font:700 24px/1.15 var(--f-paper);margin:0 0 4px;letter-spacing:-.005em}
+.paper .contact{color:var(--ink-2);font-size:12.5px;margin:0}
+.paper h2{font:600 12px/1.3 var(--f-ui);letter-spacing:.12em;text-transform:uppercase;margin:18px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--line)}
+.paper p{margin:3px 0}
+.paper p.role{font-weight:600;margin-top:10px}
+.paper ul{margin:3px 0 3px;padding-left:18px}
+.paper li{margin:2px 0}
+.paper [data-line]{border-radius:3px;transition:background .15s,box-shadow .15s}
+.paper .focus{background:var(--accent-soft);box-shadow:0 0 0 3px var(--accent-soft)}
+.paper .flash{background:var(--good-soft);box-shadow:0 0 0 3px var(--good-soft)}
+.paper mark{background:var(--mark);color:inherit;padding:0 1px;border-radius:2px}
+.paper.nomark mark{background:transparent}
+#resumeText{min-height:620px;font-family:var(--f-mono);font-size:12.5px;background:var(--paper)}
+.banner{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:space-between;font-size:12.5px;background:var(--accent-soft);color:var(--ink);border-radius:10px;padding:8px 12px}
+.toggle{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2)}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--panel);padding:9px 16px;border-radius:9px;font-size:13px;box-shadow:var(--shadow);z-index:9;max-width:calc(100% - 32px)}
+.note{font-size:12px;color:var(--ink-3);margin:0}
+
+
+.banner.warn{background:var(--warn-soft)}
+.editor{border:1px solid var(--accent);border-radius:12px;padding:12px;display:grid;gap:8px;background:var(--panel)}
+.ed-h{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;font-size:13px}
+.fontnote{font-size:12px;color:var(--ink-3)}
+#leText{min-height:64px;background:var(--ground);font-family:var(--f-ui)}
+.ed-f{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.ed-b{display:flex;gap:8px;flex-wrap:wrap}
+.fit{font-size:12.5px;font-weight:500;display:inline-flex;align-items:center;gap:6px}
+.fit::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor}
+.fit.ok{color:var(--good)} .fit.shrink{color:var(--accent)} .fit.bad{color:var(--bad)} .fit.wait{color:var(--ink-3)}
+.pdfpages{display:grid;gap:14px;max-width:820px;margin:0 auto}
+.pg{position:relative;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.15),0 6px 18px rgba(0,0,0,.08)}
+.pg canvas{display:block;width:100%;height:auto}
+.ov{position:absolute;inset:0}
+.lb{position:absolute;cursor:pointer;border-radius:2px;outline-offset:1px}
+.lb:hover,.lb:focus-visible{background:rgba(36,72,200,.07);outline:1px solid rgba(36,72,200,.45)}
+.lb.focus{background:rgba(36,72,200,.12);outline:2px solid rgba(36,72,200,.6)}
+.lb.flash{background:rgba(23,128,79,.2)}
+.lb.changed::before{content:"";position:absolute;left:-7px;top:8%;bottom:8%;width:3px;border-radius:2px;background:#17804F}
+.lb.over::before{background:#B9372F}
+.km{position:absolute;background:rgba(255,208,0,.42);mix-blend-mode:multiply;pointer-events:none;border-radius:1px}
+.nomark .km{display:none}
+.pdf-loading{padding:40px 16px;text-align:center;color:var(--ink-3);font-size:13px;background:var(--panel);border-radius:8px}
+.fitchip{font-size:11px;font-weight:600;letter-spacing:0;text-transform:none;padding:1px 7px;border-radius:999px}
+.fitchip.ok{background:var(--good-soft);color:var(--good)} .fitchip.shrink{background:var(--accent-soft);color:var(--accent)} .fitchip.bad{background:var(--bad-soft);color:var(--bad)}
+@media (max-width:1080px){.scorebar{grid-template-columns:auto minmax(0,1fr)}.scorebar .rv{grid-column:1/-1}}
+@media (max-width:900px){.split{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:560px){
+  body{padding:12px 16px 28px}
+  .scorebar{grid-template-columns:minmax(0,1fr);justify-items:start}
+  .sub{grid-template-columns:92px minmax(0,1fr) 34px}
+  .paper{padding:24px 20px}
+  .paper-wrap{padding:10px}
+}
+</style>
+
+<div class="app">
+  <header class="top">
+    <div class="brand"><h1>ResumeFit</h1><span>Tailor your resume to one job description</span></div>
+    <div class="actions">
+      <label class="btn" for="upload" title="Upload a PDF or .txt resume">Upload resume (PDF)<input id="upload" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain"></label>
+      <button class="btn" id="undoBtn" disabled>Undo</button>
+      <button class="btn" id="copyBtn">Copy text</button>
+      <button class="btn" id="cleanBtn" hidden>Download clean layout</button>
+      <button class="btn primary" id="pdfBtn" hidden>Download PDF</button>
+    </div>
+  </header>
+
+  <section class="scorebar" aria-label="Match score">
+    <div class="ring" aria-live="polite">
+      <svg viewBox="0 0 112 112" aria-hidden="true">
+        <circle cx="56" cy="56" r="48" fill="none" stroke="var(--line-2)" stroke-width="10"></circle>
+        <circle id="ringArc" cx="56" cy="56" r="48" fill="none" stroke="var(--accent)" stroke-width="10" stroke-linecap="round" stroke-dasharray="301.6" stroke-dashoffset="301.6" style="transition:stroke-dashoffset .5s,stroke .3s"></circle>
+      </svg>
+      <div class="n"><b id="overall">0%</b><small>ATS fit</small></div>
+    </div>
+    <div>
+      <p class="verdict" id="verdict">Paste a job description to score your resume</p>
+      <div class="subs" id="subs"></div>
+    </div>
+    <div class="rv">
+      <ul class="review" id="review"></ul>
+    </div>
+  </section>
+
+  <div class="split">
+    <div class="col">
+      <section class="box" aria-labelledby="jdH">
+        <div class="box-h"><h2 id="jdH">Job description</h2><span class="hint">Paste the full JD. Scores update as you type.</span></div>
+        <div class="box-b">
+          <textarea id="jd" spellcheck="false" aria-label="Job description"></textarea>
+          <div class="meta" id="jdMeta"></div>
+          <div class="kw-group"><h4>Required keywords <em id="reqCount"></em></h4><div class="chips" id="reqChips"></div></div>
+          <div class="kw-group" id="prefGroup"><h4>Nice to have <em id="prefCount"></em></h4><div class="chips" id="prefChips"></div></div>
+        </div>
+      </section>
+
+      <section class="box" aria-labelledby="sgH">
+        <div class="box-h">
+          <h2 id="sgH">Suggested changes</h2>
+          <div class="tabs" role="group" aria-label="Filter suggestions">
+            <button data-f="open" aria-pressed="true">To review <span id="openCount"></span></button>
+            <button data-f="all" aria-pressed="false">All</button>
+          </div>
+        </div>
+        <div class="box-b">
+          <div class="ai-status">
+            <label class="ai-pick" for="aiProvider"><span>AI</span>
+              <select id="aiProvider" aria-label="Which AI writes the suggestions"></select>
+            </label>
+            <button class="btn primary" id="aiBtn">Suggest rewrites</button>
+            <button class="btn" id="stopBtn" hidden>Stop</button>
+            <button class="btn ghost" id="refreshBtn">Re-check quick fixes</button>
+          </div>
+          <div class="ai-panel" id="localPanel" hidden>
+            <p class="note">Uses Claude Code or Codex installed on your computer. In a terminal, inside this project's folder, run <code>node bridge/resumefit-bridge.mjs</code>, then paste the connection code it prints.</p>
+            <div class="ai-row">
+              <input id="bridgeUrl" type="url" spellcheck="false" aria-label="Helper address" placeholder="http://127.0.0.1:8787">
+              <input id="bridgeToken" type="text" spellcheck="false" autocomplete="off" aria-label="Connection code" placeholder="Connection code">
+              <button class="btn" id="bridgeConnect">Connect</button>
+            </div>
+            <span class="bridge-status" id="bridgeStatus"></span>
+          </div>
+          <div class="ai-panel" id="pastePanel" hidden>
+            <p class="note">Works with any chatbot: ChatGPT, Gemini, Claude, Copilot. <b>1.</b> Copy the prompt. <b>2.</b> Paste it into the chatbot. <b>3.</b> Paste its whole reply below.</p>
+            <div class="ai-row"><button class="btn" id="copyPrompt">Copy prompt</button><span class="note" id="copyNote"></span></div>
+            <textarea id="promptBox" readonly hidden aria-label="Prompt to copy"></textarea>
+            <textarea id="pasteBox" spellcheck="false" aria-label="Chatbot reply" placeholder="Paste the chatbot's reply here"></textarea>
+            <div class="ai-row"><button class="btn primary" id="usePaste">Turn reply into suggestions</button></div>
+          </div>
+          <span class="ai-msg" id="aiMsg"></span>
+          <p class="note" id="sugNote"></p>
+          <div class="sugs" id="sugs"></div>
+        </div>
+      </section>
+    </div>
+
+    <section class="box" aria-labelledby="rsH">
+      <div class="box-h">
+        <h2 id="rsH">Your resume</h2>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <label class="toggle"><input type="checkbox" id="markToggle" checked> Highlight keywords</label>
+          <div class="tabs" role="group" aria-label="Resume view">
+            <button data-v="pdf" aria-pressed="false" hidden>Original layout</button>
+            <button data-v="preview" aria-pressed="true">Clean view</button>
+            <button data-v="edit" aria-pressed="false">Edit text</button>
+          </div>
+        </div>
+      </div>
+      <div class="box-b" style="padding-bottom:0">
+        <div class="banner" id="sampleBanner"><span>Sample resume and JD loaded as an example. Upload your PDF and paste your JD to start.</span><button class="btn" id="clearBtn">Clear both</button></div>
+        <div class="banner" id="pdfBanner" hidden><span id="pdfBannerText"></span></div>
+        <div class="banner warn" id="pdfWarn" hidden></div>
+        <div class="editor" id="lineEditor" hidden>
+          <div class="ed-h"><b>Edit line</b><span class="fontnote" id="leFont"></span></div>
+          <textarea id="leText" rows="3" aria-label="Line text"></textarea>
+          <div class="ed-f"><span class="fit" id="leFit"></span>
+            <div class="ed-b"><button class="btn ghost" id="leRestore">Restore original</button><button class="btn" id="leCancel">Cancel</button><button class="btn primary" id="leSave">Save line</button></div>
+          </div>
+        </div>
+      </div>
+      <div class="paper-wrap">
+        <div class="rview pdfpages" id="pdfView" hidden aria-label="Resume in its original layout"></div>
+        <article class="rview paper" id="paper" aria-label="Resume preview"></article>
+        <textarea id="resumeText" spellcheck="true" aria-label="Resume text" hidden></textarea>
+      </div>
+    </section>
+  </div>
+</div>
+<div class="toast" id="toast" hidden></div>
+<script src="src/pdf-engine.js"></script>
+<script src="src/app.js"></script>
