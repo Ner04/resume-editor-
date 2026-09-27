@@ -14,7 +14,7 @@ It runs entirely in your browser. There is no server, sign-up or database.
 
 ## Use it
 
-**Online:** once GitHub Pages is turned on for this repo, open `https://ner04.github.io/resume-editor-/`.
+**Online:** open **https://ner04.github.io/resume-editor-/**. Nothing to install.
 
 **On your computer:** download or clone the repo and open `index.html` in your browser. Everything it needs is in the repo, so it works offline. To use an AI agent on your computer (Claude Code, Codex, Kiro, Grok, Gemini CLI, GitHub Copilot), start the local helper described below instead. It serves the app for you.
 
@@ -194,3 +194,7 @@ pdf.js 3.11 has a known issue with malicious PDFs ([CVE-2024-4367](https://githu
 Your resume and the job description stay in your browser, saved in its local storage so a refresh doesn't lose your work. **Start over** removes them. They only leave your computer when you ask for AI suggestions, and then only to the AI you chose.
 
 The page loads its fonts from Google Fonts. Offline, it uses your system fonts instead.
+
+## License
+
+[MIT](LICENSE) © 2026 Shubham Nayak. The bundled libraries in `lib/` keep their own licenses (Apache-2.0 and MIT, see [lib/README.md](lib/README.md)).
