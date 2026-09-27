@@ -14,19 +14,21 @@
  *
  * Safety:
  *  - Listens on 127.0.0.1 only, so other devices on your network can't use it.
- *  - Every request needs the connection code, so other websites you visit can't use it.
- *  - The CLI runs in an empty temporary folder. Claude Code runs with its tools
- *    turned off, and Codex runs in its read-only sandbox.
+ *  - Every AI request needs the connection code, so other websites you visit can't use it.
+ *  - Answers only requests addressed to 127.0.0.1 or localhost (blocks DNS-rebinding tricks).
+ *  - Each agent runs in an empty temporary folder with its tools turned off or read-only,
+ *    so a job description with hidden instructions can't make it touch your files.
  *  - Your resume is sent only to the AI tool you picked. Nothing is stored.
  *
  * Settings (environment variables, all optional):
- *  RESUMEFIT_PORT      port to listen on (default 8787)
- *  RESUMEFIT_TOKEN     fixed connection code instead of a random one
- *  RESUMEFIT_ORIGINS   comma-separated list of sites allowed to call the helper,
- *                      e.g. https://yourname.github.io (default: any site that has the code)
- *  RESUMEFIT_TIMEOUT   seconds to wait for an answer (default 240)
- *  RESUMEFIT_CLAUDE_BIN / RESUMEFIT_CODEX_BIN     path to the CLI if it isn't on PATH
- *  RESUMEFIT_CLAUDE_ARGS / RESUMEFIT_CODEX_ARGS   JSON array to replace the default arguments
+ *  RESUMEFIT_PORT            port to listen on (default 8787)
+ *  RESUMEFIT_TOKEN           fixed connection code instead of a random one
+ *  RESUMEFIT_ORIGINS         comma-separated list of sites allowed to call the helper,
+ *                            e.g. https://yourname.github.io (default: any site that has the code)
+ *  RESUMEFIT_TIMEOUT         seconds to wait for an answer (default 240)
+ *  RESUMEFIT_<AGENT>_BIN     path to an agent's CLI if it isn't on PATH, e.g. RESUMEFIT_KIRO_BIN
+ *  RESUMEFIT_<AGENT>_ARGS    JSON array to replace an agent's arguments
+ *  RESUMEFIT_AGENTS          path to a JSON file with extra agents (default bridge/agents.json)
  */
 import http from "node:http";
 import { spawn, spawnSync } from "node:child_process";
@@ -36,7 +38,9 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const VERSION = 1;
+const VERSION = 2;
+const NODE_MAJOR = Number(process.versions.node.split(".")[0]);
+if (NODE_MAJOR < 18) { console.error(`ResumeFit's helper needs Node.js 18 or newer. You have ${process.version}. Get it from https://nodejs.org`); process.exit(1); }
 const HOST = "127.0.0.1";
 const PORT = Number(process.env.RESUMEFIT_PORT) || 8787;
 const TOKEN = process.env.RESUMEFIT_TOKEN || crypto.randomBytes(12).toString("base64url");
@@ -62,10 +66,15 @@ const jsonArgs = (name, fallback) => {
  * Add your own in bridge/agents.json (see bridge/agents.example.json).
  */
 const BUILT_IN = [
+  // Claude Code: --tools "" removes every built-in tool; --strict-mcp-config and mcp__* keep out
+  // your own MCP connectors (a browser extension, email and so on). Older versions use legacyArgs.
   { id: "claude", label: "Claude Code", bin: "claude",
-    args: ["-p", "--output-format", "text", "--disallowedTools", "Bash", "Edit", "Write", "MultiEdit", "NotebookEdit", "Read", "Glob", "Grep", "WebFetch", "WebSearch", "Task"] },
+    args: ["-p", "--output-format", "text", "--tools", "", "--strict-mcp-config", "--disallowedTools", "mcp__*"],
+    legacyArgs: ["-p", "--output-format", "text", "--disallowedTools", "Bash", "Edit", "Write", "NotebookEdit", "Read", "Glob", "Grep", "WebFetch", "WebSearch", "Task", "mcp__*"] },
+  // Codex: read-only sandbox; --ephemeral keeps it from saving the session (your resume) to disk
   { id: "codex", label: "Codex", bin: "codex",
-    args: ["exec", "--skip-git-repo-check", "--sandbox", "read-only", "-o", "{OUT}", "-"] },
+    args: ["exec", "--skip-git-repo-check", "--sandbox", "read-only", "--ephemeral", "-o", "{OUT}", "-"],
+    legacyArgs: ["exec", "--skip-git-repo-check", "--sandbox", "read-only", "-o", "{OUT}", "-"] },
   // Kiro CLI headless mode: no --trust-tools, so it can't run tools
   { id: "kiro", label: "Kiro", bin: "kiro-cli", args: ["chat", "--no-interactive"] },
   // Grok Build CLI: without --always-approve it can't run tools on its own
@@ -88,15 +97,30 @@ function loadCustomAgents() {
 const PROVIDERS = {};
 for (const a of [...BUILT_IN, ...loadCustomAgents()]) {
   const key = a.id.toUpperCase().replace(/-/g, "_");
-  PROVIDERS[a.id] = { ...a, bin: process.env[`RESUMEFIT_${key}_BIN`] || a.bin, args: jsonArgs(`RESUMEFIT_${key}_ARGS`, a.args), pinned: !!process.env[`RESUMEFIT_${key}_BIN`] };
+  const custom = !!process.env[`RESUMEFIT_${key}_ARGS`];
+  PROVIDERS[a.id] = { ...a, bin: process.env[`RESUMEFIT_${key}_BIN`] || a.bin, args: jsonArgs(`RESUMEFIT_${key}_ARGS`, a.args),
+    legacyArgs: custom ? null : a.legacyArgs || null, pinned: !!process.env[`RESUMEFIT_${key}_BIN`] };
 }
 
-const quoteWin = a => (/[\s"&|<>^]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a);
+const quoteWin = a => (a === "" ? '""' : /[\s"&|<>^%]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a);
 function tryVersion(bin) {
   try {
     const r = spawnSync(bin, ["--version"], { env: ENV, shell: IS_WIN, timeout: 20000, encoding: "utf8", windowsHide: true });
     return r.status === 0 ? ((r.stdout || r.stderr || "").trim().split("\n")[0] || "installed") : null;
   } catch { return null; }
+}
+let loginDirs = null;
+function loginPathDirs() {
+  if (loginDirs) return loginDirs;
+  loginDirs = [];
+  if (IS_WIN) return loginDirs;
+  try {
+    const sh = process.env.SHELL || "/bin/zsh";
+    const r = spawnSync(sh, ["-lic", "echo __RF__$PATH"], { timeout: 8000, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    const line = (r.stdout || "").split("\n").find(l => l.includes("__RF__"));
+    if (line) loginDirs = line.split("__RF__")[1].trim().split(":").filter(d => d.startsWith("/"));
+  } catch {}
+  return loginDirs;
 }
 // Places these CLIs are commonly installed when they aren't on this terminal's PATH
 function candidates(id, name) {
@@ -115,19 +139,14 @@ function candidates(id, name) {
   } catch {}
   for (const d of dirs) out.push(path.join(d, name));
   if (id === "codex") out.push("/Applications/Codex.app/Contents/Resources/codex", "/Applications/Codex.app/Contents/MacOS/codex");
-  // ask the login shell, which loads ~/.zshrc or ~/.bashrc
-  try {
-    const sh = process.env.SHELL || "/bin/zsh";
-    const r = spawnSync(sh, ["-lic", `command -v ${name}`], { timeout: 8000, encoding: "utf8" });
-    const hit = (r.stdout || "").trim().split("\n").pop();
-    if (hit && hit.startsWith("/")) out.unshift(hit);
-  } catch {}
+  // folders on the PATH of your login shell (loads ~/.zshrc or ~/.bashrc), looked up once
+  for (const d of loginPathDirs()) out.push(path.join(d, name));
   return out;
 }
 function detect(id, p) {
   const direct = tryVersion(p.bin);
   if (direct) return direct;
-  if (p.pinned || path.isAbsolute(p.bin)) return null; // the user chose a path; don't guess
+  if (p.pinned || path.isAbsolute(p.bin) || !/^[\w.-]+$/.test(p.bin)) return null; // the user chose a path; don't guess
   for (const c of candidates(id, path.basename(p.bin))) {
     if (!fs.existsSync(c)) continue;
     const v = tryVersion(c);
@@ -139,31 +158,55 @@ const found = {};
 for (const [id, p] of Object.entries(PROVIDERS)) found[id] = detect(id, p);
 
 let busy = false;
-function runCli(id, prompt) {
+const UNKNOWN_FLAG = /unknown (option|argument|flag)|unrecognized (option|argument)|unexpected argument|invalid option/i;
+function killTree(child) {
+  try {
+    if (IS_WIN && child.pid) spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { windowsHide: true });
+    else { try { process.kill(-child.pid, "SIGTERM"); } catch { child.kill("SIGTERM"); } } // the agent and anything it started
+  } catch {}
+}
+// Runs an agent. Retries once with legacyArgs when an older CLI doesn't know a newer flag.
+async function runCli(id, prompt, signal) {
   const p = PROVIDERS[id];
+  try { return await runOnce(p, p.args, prompt, signal); }
+  catch (e) {
+    if (e.code === "cli_failed" && p.legacyArgs && UNKNOWN_FLAG.test(e.message)) {
+      console.log(`  (${p.label} is an older version; retrying with compatible options)`);
+      return runOnce(p, p.legacyArgs, prompt, signal);
+    }
+    throw e;
+  }
+}
+function runOnce(p, argTemplate, prompt, signal) {
   return new Promise((resolve, reject) => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "resumefit-"));
     const out = path.join(dir, "answer.txt");
-    const viaArg = p.args.some(a => a.includes("{PROMPT}"));
-    let args = p.args.map(a => a.replace("{OUT}", out).replace("{PROMPT}", prompt));
+    const viaArg = argTemplate.some(a => a.includes("{PROMPT}"));
+    // split/join, not replace(): a "$&" or "$'" in the resume must stay as typed
+    let args = argTemplate.map(a => a.split("{OUT}").join(out).split("{PROMPT}").join(prompt));
     let bin = p.bin, shell = IS_WIN;
     if (IS_WIN && viaArg) {
       // cmd.exe can't pass a long multi-line prompt, so run the .exe directly
-      const exe = (spawnSync("where", [p.bin], { encoding: "utf8" }).stdout || "").split(/\r?\n/).find(l => /\.exe$/i.test(l.trim()));
+      const exe = path.isAbsolute(p.bin) && /\.exe$/i.test(p.bin) ? p.bin
+        : (spawnSync("where", [p.bin], { encoding: "utf8" }).stdout || "").split(/\r?\n/).map(l => l.trim()).find(l => /\.exe$/i.test(l));
       if (!exe) { fs.rmSync(dir, { recursive: true, force: true }); return reject(Object.assign(new Error(`${p.label} takes the prompt as an argument, which doesn't work through a Windows .cmd launcher. Use WSL, or an agent that reads stdin (Claude Code, Codex, Kiro, Gemini CLI).`), { code: "cli_failed" })); }
-      bin = exe.trim(); shell = false;
-    } else if (IS_WIN) args = args.map(quoteWin);
-    const child = spawn(bin, args, { cwd: dir, shell, windowsHide: true, stdio: ["pipe", "pipe", "pipe"], env: ENV });
+      bin = exe; shell = false;
+    } else if (IS_WIN) { args = args.map(quoteWin); bin = quoteWin(bin); }
+    // detached on macOS/Linux puts the agent in its own process group, so Stop can end all of it
+    const child = spawn(bin, args, { cwd: dir, shell, windowsHide: true, detached: !IS_WIN, stdio: ["pipe", "pipe", "pipe"], env: ENV });
     let stdout = "", stderr = "", done = false;
     const cap = (s, d) => (s.length > 2e6 ? s : s + d);
     child.stdout.on("data", d => { stdout = cap(stdout, d.toString()); });
     child.stderr.on("data", d => { stderr = cap(stderr, d.toString()); });
+    const onAbort = () => { killTree(child); finish(Object.assign(new Error("stopped"), { code: "cancelled" })); };
     const finish = (err, text) => {
       if (done) return; done = true; clearTimeout(timer);
+      if (signal) signal.removeEventListener("abort", onAbort);
       try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
       err ? reject(err) : resolve(text);
     };
-    const timer = setTimeout(() => { try { child.kill("SIGTERM"); } catch {} finish(Object.assign(new Error("timed out"), { code: "timeout" })); }, TIMEOUT_MS);
+    const timer = setTimeout(() => { killTree(child); finish(Object.assign(new Error("timed out"), { code: "timeout" })); }, TIMEOUT_MS);
+    if (signal) { if (signal.aborted) return onAbort(); signal.addEventListener("abort", onAbort); }
     child.on("error", e => finish(Object.assign(new Error(`${p.label} could not start: ${e.message}`), { code: "cli_failed" })));
     child.on("close", code => {
       let text = "";
@@ -171,7 +214,7 @@ function runCli(id, prompt) {
       if (!text.trim()) text = stdout;
       text = text.replace(/\x1b\[[0-9;?]*[ -\/]*[@-~]/g, "").replace(/\x1b\][^\x07]*\x07/g, ""); // strip terminal colours
       if (code !== 0 && !text.trim()) {
-        const why = (stderr || stdout).trim().split("\n").slice(-3).join(" ").slice(0, 300) || `exit code ${code}`;
+        const why = (stderr || stdout).replace(/\x1b\[[0-9;?]*[ -\/]*[@-~]/g, "").trim().split("\n").slice(-3).join(" ").slice(0, 300) || `exit code ${code}`;
         return finish(Object.assign(new Error(why), { code: "cli_failed" }));
       }
       finish(null, text.trim());
@@ -205,9 +248,10 @@ function send(res, status, obj) {
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".ico": "image/x-icon", ".png": "image/png" };
 function serveApp(req, res) {
   const url = new URL(req.url, "http://x");
-  let rel = decodeURIComponent(url.pathname);
+  let rel;
+  try { rel = decodeURIComponent(url.pathname); } catch { return false; }
   if (rel === "/") rel = "/index.html";
-  if (!/^\/(index\.html|favicon\.ico|src\/[\w.-]+\.(js|css)|assets\/[\w.\/-]+\.(png|svg|ico|css|js))$/.test(rel) || rel.includes("..")) return false;
+  if (!/^\/(index\.html|favicon\.ico|(src|lib)\/[\w.-]+\.(js|css)|assets\/[\w.\/-]+\.(png|svg|ico|css|js))$/.test(rel) || rel.includes("..")) return false;
   const file = path.join(APP_ROOT, rel);
   if (!file.startsWith(APP_ROOT) || !fs.existsSync(file)) return false;
   res.writeHead(200, { "Content-Type": TYPES[path.extname(file)] || "application/octet-stream", "Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff" });
@@ -215,10 +259,18 @@ function serveApp(req, res) {
   return true;
 }
 
+// Only answer requests addressed to this computer by name (blocks DNS rebinding)
+const HOSTS = new Set([`127.0.0.1:${PORT}`, `localhost:${PORT}`, `[::1]:${PORT}`]);
 const server = http.createServer((req, res) => {
+  try { handle(req, res); }
+  catch (e) { console.error("Request failed:", e.message); if (!res.headersSent) send(res, 500, { error: "server_error" }); }
+});
+function handle(req, res) {
+  if (!HOSTS.has(String(req.headers.host || "").toLowerCase())) return send(res, 421, { error: "wrong_host", message: "Open the helper at http://127.0.0.1:" + PORT });
   cors(req, res);
   if (req.method === "OPTIONS") { res.writeHead(204); return res.end(); }
-  const route = new URL(req.url, "http://x").pathname;
+  let route;
+  try { route = new URL(req.url, "http://x").pathname; } catch { return send(res, 400, { error: "bad_request" }); }
 
   if (req.method === "GET" && route === "/health") {
     if (!tokenOk(req)) return send(res, 401, { error: "bad_token", message: "Connection code missing or wrong." });
@@ -230,8 +282,10 @@ const server = http.createServer((req, res) => {
     if (!tokenOk(req)) return send(res, 401, { error: "bad_token", message: "Connection code missing or wrong." });
     if (ORIGINS.length && req.headers.origin && !ORIGINS.includes(req.headers.origin)) return send(res, 403, { error: "origin", message: "This site isn't allowed. Add it to RESUMEFIT_ORIGINS." });
     let size = 0; const chunks = [];
-    req.on("data", c => { size += c.length; if (size > MAX_BODY) { req.destroy(); } else chunks.push(c); });
+    let tooBig = false;
+    req.on("data", c => { size += c.length; if (size > MAX_BODY) { if (!tooBig) { tooBig = true; send(res, 413, { error: "too_large", message: "Request is too large." }); req.destroy(); } } else chunks.push(c); });
     req.on("end", async () => {
+      if (tooBig) return;
       let body;
       try { body = JSON.parse(Buffer.concat(chunks).toString("utf8")); } catch { return send(res, 400, { error: "bad_request", message: "Body must be JSON." }); }
       const id = body && body.provider;
@@ -241,14 +295,17 @@ const server = http.createServer((req, res) => {
       if (busy) return send(res, 429, { error: "busy", message: "Already working on a request." });
       busy = true;
       const started = Date.now();
+      // the page pressed Stop or was closed: stop the agent too
+      const ctl = new AbortController();
+      res.on("close", () => { if (!res.writableEnded) ctl.abort(); });
       console.log(`→ ${PROVIDERS[id].label}: writing suggestions…`);
       try {
-        const text = await runCli(id, body.prompt);
+        const text = await runCli(id, body.prompt, ctl.signal);
         console.log(`✓ done in ${Math.round((Date.now() - started) / 1000)}s`);
         send(res, 200, { text });
       } catch (e) {
-        console.log(`✗ ${e.message}`);
-        send(res, e.code === "timeout" ? 504 : 502, { error: e.code || "cli_failed", message: e.message });
+        console.log(e.code === "cancelled" ? "■ stopped" : `✗ ${e.message}`);
+        if (!res.writableEnded && !res.destroyed) send(res, e.code === "timeout" ? 504 : 502, { error: e.code || "cli_failed", message: e.message });
       } finally { busy = false; }
     });
     return;
@@ -256,7 +313,7 @@ const server = http.createServer((req, res) => {
 
   if (req.method === "GET" && serveApp(req, res)) return;
   send(res, 404, { error: "not_found" });
-});
+}
 
 server.on("error", e => {
   if (e.code === "EADDRINUSE") console.error(`Port ${PORT} is already in use. Stop the other program, or run with RESUMEFIT_PORT=8788.`);

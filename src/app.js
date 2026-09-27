@@ -383,7 +383,7 @@ function renderSugs(){
     ? "Accepted changes go straight into your original PDF, in the same spot, font size and colour. Hover a card to see the line it edits."
     : "Nothing changes in your resume until you press Accept. Hover a card to see the line it edits.";
   if (!list.length){
-    $("#sugs").innerHTML = `<div class="empty">${S.sugs.length ? "All suggestions reviewed. Ask AI for more rewrites, or edit lines directly." : "No quick fixes found. Press “Suggest rewrites with AI” for line-by-line improvements."}</div>`;
+    $("#sugs").innerHTML = `<div class="empty">${S.sugs.length ? "All suggestions reviewed. Ask AI for more rewrites, or edit lines directly." : "No quick fixes found. Press “Suggest rewrites” or open the Resume assistant for line-by-line improvements."}</div>`;
     return;
   }
   $("#sugs").innerHTML = list.map(s => {
@@ -699,18 +699,32 @@ function toast(msg){ const t = $("#toast"); t.textContent = msg; t.hidden = fals
 
 /* ---------- library loader ---------- */
 const loaded = {};
-function loadScript(src){
-  return loaded[src] || (loaded[src] = new Promise((res, rej) => {
-    const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = () => { delete loaded[src]; rej(new Error("load")); }; document.head.appendChild(s);
-  }));
+// Libraries ship in lib/, so the app works offline. Inside Claude (artifact) they come from a CDN.
+// If lib/ is missing (only index.html was copied), the CDN copy is used instead.
+function loadOne(src){
+  return new Promise((res, rej) => {
+    const s = document.createElement("script"); s.src = src; s.onload = res;
+    s.onerror = () => { s.remove(); rej(new Error("load " + src)); };
+    document.head.appendChild(s);
+  });
 }
-const PDFJS = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
-const PDFJS_W = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-const PDFLIB = "https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js";
-const JSPDF = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
+function loadScript(lib){
+  const key = lib.local;
+  return loaded[key] || (loaded[key] = (async () => {
+    const order = window.claude ? [lib.cdn] : [lib.local, lib.cdn];
+    let err;
+    for (const src of order){ try { await loadOne(src); return; } catch (e) { err = e; } }
+    delete loaded[key]; throw err;
+  })());
+}
+const lib = (local, cdn) => ({ local: "lib/" + local, cdn });
+const PDFJS = lib("pdf.min.js", "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js");
+const PDFJS_W = lib("pdf.worker.min.js", "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js");
+const PDFLIB = lib("pdf-lib.min.js", "https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js");
+const JSPDF = lib("jspdf.umd.min.js", "https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js");
 async function loadPdfLibs(){
   await loadScript(PDFJS); await loadScript(PDFJS_W); await loadScript(PDFLIB);
-  window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_W;
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc = window.claude ? PDFJS_W.cdn : new URL(PDFJS_W.local, location.href).href;
 }
 async function openPdf(bytes){
   await loadPdfLibs();
@@ -1005,7 +1019,7 @@ $("#aiBtn").addEventListener("click", async () => {
   ctl = new AbortController();
   $("#aiBtn").disabled = true; $("#stopBtn").hidden = false;
   const who = local ? agentLabel(agentOf(AI.provider)) : "Claude";
-  $("#aiMsg").innerHTML = `<span class="dots">${who} is reading the JD and your resume. This can take a minute</span>`;
+  $("#aiMsg").innerHTML = `<span class="dots">${esc(who)} is reading the JD and your resume. This can take a minute</span>`;
   try {
     let res;
     if (local){

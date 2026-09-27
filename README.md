@@ -16,7 +16,7 @@ It runs entirely in your browser. There is no server, sign-up or database.
 
 **Online:** once GitHub Pages is turned on for this repo, open `https://ner04.github.io/resume-editor-/`.
 
-**On your computer:** download or clone the repo and open `index.html` in your browser. To use an AI agent on your computer (Claude Code, Codex, Kiro, Grok, Gemini CLI, GitHub Copilot), start the local helper described below instead. It serves the app for you.
+**On your computer:** download or clone the repo and open `index.html` in your browser. Everything it needs is in the repo, so it works offline. To use an AI agent on your computer (Claude Code, Codex, Kiro, Grok, Gemini CLI, GitHub Copilot), start the local helper described below instead. It serves the app for you.
 
 ```bash
 git clone https://github.com/Ner04/resume-editor-.git
@@ -90,7 +90,7 @@ When the page runs as a Claude artifact inside claude.ai, a fourth option, **Cla
 
 ### Use an AI agent on your computer (the local helper)
 
-A web page can't start programs on your computer by itself. `bridge/resumefit-bridge.mjs` is a small helper that connects the page to your installed CLI. It needs Node.js 18 or newer and has no other dependencies.
+A web page can't start programs on your computer by itself. `bridge/resumefit-bridge.mjs` is a small helper that connects the page to your installed CLI. It needs [Node.js](https://nodejs.org) 18 or newer and has no other dependencies. Nothing to install with npm.
 
 1. Install one of the agents above, and run it once in a terminal so you're signed in.
 2. In this project's folder, run:
@@ -105,9 +105,12 @@ A web page can't start programs on your computer by itself. `bridge/resumefit-br
 
 **Safety:**
 - The helper only listens on `127.0.0.1`, so other devices on your network can't reach it.
-- Every request needs the connection code, so other websites you visit can't use it.
-- Every agent runs in an empty temporary folder, with its tools off or read-only (see the table above). The prompt also tells it not to use tools.
-- Your resume goes only to the AI tool you picked. The helper stores nothing.
+- Every AI request needs the connection code, so other websites you visit can't use it.
+- It only answers requests addressed to `127.0.0.1` or `localhost`, which blocks DNS-rebinding tricks.
+- Every agent runs in an empty temporary folder with its tools off or read-only (see the table above). For Claude Code this includes MCP connectors such as a browser extension. So a job description with hidden instructions can't make the agent touch your files, run commands or use your apps. The prompt also treats the job description and resume as data, not instructions.
+- **Stop** in the app ends the agent and everything it started.
+- Your resume goes only to the AI tool you picked. The helper stores nothing, and Codex runs with `--ephemeral`, so it doesn't save the session either.
+- If an older CLI version doesn't know a newer safety flag, the helper retries once with the older, compatible options.
 
 **Settings** (optional environment variables):
 
@@ -178,11 +181,16 @@ src/app.js                  scoring, keywords, suggestions, AI options, UI
 src/pdf-engine.js           reads the PDF and rewrites lines in place
 bridge/resumefit-bridge.mjs local helper for AI agents on your computer
 bridge/agents.example.json  template for adding more agents
+lib/                        pdf.js 3.11.174, pdf-lib 1.17.1, jsPDF 4.2.1 and their licenses
 docs/screenshots/           images used in this README
 ```
 
-Libraries are loaded from cdnjs: pdf.js 3.11.174, pdf-lib 1.17.1 and jsPDF 2.5.1.
+The libraries are bundled in `lib/`, so the app needs no CDN and works offline. If `lib/` is missing, it falls back to the same versions on a CDN.
+
+pdf.js 3.11 has a known issue with malicious PDFs ([CVE-2024-4367](https://github.com/advisories/GHSA-wgrm-67xf-hhpq)). ResumeFit uses the official fix for it: every PDF is opened with `isEvalSupported: false`.
 
 ## Privacy
 
-Your resume and the job description stay in your browser, saved in its local storage so a refresh doesn't lose your work. **Clear both** removes them. They only leave your computer when you ask for AI suggestions, and then only to the AI you chose.
+Your resume and the job description stay in your browser, saved in its local storage so a refresh doesn't lose your work. **Start over** removes them. They only leave your computer when you ask for AI suggestions, and then only to the AI you chose.
+
+The page loads its fonts from Google Fonts. Offline, it uses your system fonts instead.
